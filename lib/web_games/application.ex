@@ -13,9 +13,17 @@ defmodule WebGames.Application do
       # Start the PubSub system
       {Phoenix.PubSub, name: WebGames.PubSub},
       # Start the Endpoint (http/https)
-      WebGamesWeb.Endpoint
+      WebGamesWeb.Endpoint,
       # Start a worker by calling: WebGames.Worker.start_link(arg)
       # {WebGames.Worker, arg}
+
+      # Game platform stuff
+      # TODO: Move to it's own application
+      # {Phoenix.PubSub, name: GamePlatform.PubSub},
+      # GameSupervisor
+      {GamePlatform.GameSupervisor, []},
+      # Registry
+      {Registry, [keys: :unique, name: :game_registry]},
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
