@@ -3,6 +3,9 @@ defmodule GamePlatform.GameState do
   @callback handle_event(event :: term(), state :: term()) ::
     {:ok, notifications :: list(term()), state :: term()}
 
+  @callback player_connected(player_id :: String.t(), state :: term()) ::
+    {:ok, notifications :: list(term()), state :: term()}
+
   @callback init(term()) :: term()
 
   @state_fields [
@@ -22,6 +25,8 @@ defmodule GamePlatform.GameState do
     end
   end
 
+  # TODO: Fix consistency in argument ordering. Sometimes "game" is the last arg, sometimes it's the first.
+
   def take_notifications(game) do
     {Enum.reverse(game.notifications), struct(game, notifications: [])}
   end
@@ -34,14 +39,8 @@ defmodule GamePlatform.GameState do
     struct(game, notifications: [notification | game.notifications])
   end
 
-  def add_player(game, _player) do
-    # TODO: Players
-    game
-  end
-
-  def player_connected(game, _player) do
-    # TODO: Players
-    game
+  def add_player(game, player) do
+    struct(game, players: [player | game.players])
   end
 
   def player_exists?(_game, _player) do
@@ -53,19 +52,4 @@ defmodule GamePlatform.GameState do
     # TODO: Players
     game
   end
-
-  # defp append_notification(to, event, notifications) do
-  #   if Map.has_key?(notifications, to) do
-  #     Map.replace(notifications, to, [event | notifications[to]])
-  #   else
-  #     Map.put(notifications, to, [event])
-  #   end
-  # end
-
-  # defp reverse_notifications(notifications) do
-  #   notifications
-  #   |> Enum.into(%{}, fn {to, list} ->
-  #     {to, Enum.reverse(list)}
-  #   end)
-  # end
 end

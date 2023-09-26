@@ -6,10 +6,11 @@ defmodule GamePlatform.GameSupervisor do
   end
 
   def start_game(game_module, config) do
-    id = generate_game_id()
-    child_spec = {GamePlatform.Game, %{id: id, state_module: game_module, config: config}}
+    game_id = generate_game_id()
+    player_id = GamePlatform.Player.generate_id()
+    game_child_spec = {GamePlatform.Game, %{id: game_id, state_module: game_module, config: config, start_player_id: player_id}}
 
-    {id, DynamicSupervisor.start_child(__MODULE__, child_spec)}
+    {game_id, player_id, DynamicSupervisor.start_child(__MODULE__, game_child_spec)}
   end
 
   defp generate_game_id() do

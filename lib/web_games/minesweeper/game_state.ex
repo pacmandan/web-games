@@ -94,6 +94,21 @@ defmodule WebGames.Minesweeper.GameState do
     end
   end
 
+  @impl true
+  def player_connected(game, player_id) do
+    display_grid = Enum.map(game.grid, fn {coord, cell} ->
+      %{coord: coord, display: Cell.display_value(cell)}
+    end)
+
+    sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines}
+
+    {n, g} = game
+    |> add_notification({:player, player_id}, {:sync, sync_data})
+    |> take_notifications()
+
+    {:ok, n, g}
+  end
+
   # If a game is over, do nothing.
   @impl true
   def handle_event(_, %__MODULE__{state: :win} = game), do: {:ok, [], game}
