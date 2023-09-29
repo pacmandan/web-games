@@ -18,7 +18,7 @@ defmodule WebGames.Application do
       # {WebGames.Worker, arg}
 
       # Game platform stuff
-      # TODO: Move to it's own application
+      # TODO: Move to it's own application? Maybe need to do an umbrella project?
       # {Phoenix.PubSub, name: GamePlatform.PubSub},
       # GameSupervisor
       {GamePlatform.GameSupervisor, []},

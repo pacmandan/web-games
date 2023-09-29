@@ -1,0 +1,7 @@
+<div>
+  <form action="/new-game/minesweeper" method="post">
+    <input type="hidden" name="type" value="beginner"/>
+    <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()}/>
+    <button>NEW MINESWEEPER GAME</button>
+  </form>
+</div>

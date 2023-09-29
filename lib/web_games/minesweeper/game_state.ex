@@ -1,15 +1,20 @@
 defmodule WebGames.Minesweeper.GameState do
-  use GamePlatform.GameState, [
+  defstruct [
     w: 0,
     h: 0,
     num_mines: 10,
     grid: %{},
-    state: :init
+    state: :init,
+    notifications: [],
+    player: nil,
   ]
+
+  use GamePlatform.GameState
 
   alias WebGames.Minesweeper.Config
   alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
+  alias GamePlatform.Notification
 
   @type notification_t :: {String.t() | atom(), any()}
   @type coord_t :: {integer(), integer()}
@@ -47,6 +52,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   defp get_adjacent_coords({x, y}) do
+    IO.inspect({x, y})
     for dx <- -1..1, dy <- -1..1 do
       {x + dx, y + dy}
     end
@@ -211,5 +217,28 @@ defmodule WebGames.Minesweeper.GameState do
     Enum.count(game.grid, fn {_, cell} ->
       !cell.has_mine? && !cell.opened?
     end) > 0
+  end
+
+  defp take_notifications(game) do
+    {Enum.reverse(game.notifications), struct(game, notifications: [])}
+  end
+
+  defp add_notification(game, to, event) do
+    %__MODULE__{game | notifications: [Notification.build(to, event) | game.notifications]}
+  end
+
+  @impl true
+  def add_player(%__MODULE__{player: nil} = game, player) do
+    {n, g} = %__MODULE__{game | player: player}
+    |> add_notification(:all, {:added, player})
+    |> take_notifications()
+
+    {:ok, n, g}
+  end
+
+  @impl true
+  def add_player(%__MODULE__{player: player} = game, player) do
+    IO.inspect("CANNOT ADD PLAYER #{inspect(player)}")
+    {:ok, [], game}
   end
 end
