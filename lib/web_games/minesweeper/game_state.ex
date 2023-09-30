@@ -219,7 +219,8 @@ defmodule WebGames.Minesweeper.GameState do
     end) > 0
   end
 
-  defp take_notifications(game) do
+  @impl true
+  def take_notifications(game) do
     {Enum.reverse(game.notifications), struct(game, notifications: [])}
   end
 

@@ -1,11 +1,10 @@
 defmodule GamePlatform.Game do
+  # TODO: Rename to "GameServer"?
   use GenServer, restart: :transient
 
   alias GamePlatform.GameServerConfig
 
   @registry :game_registry
-
-  # TODO: Instead of a struct, would it be better to just use a keyword list?
   def start_link({game_id, %GameServerConfig{}} = init_arg) do
     GenServer.start_link(__MODULE__, init_arg, name: via_tuple(game_id))
   end
@@ -30,7 +29,6 @@ defmodule GamePlatform.Game do
   end
 
   def player_connected(player_id, game_id) do
-    IO.inspect("GAME PLAYER CONNECTED")
     GenServer.cast(via_tuple(game_id), {:player_connected, player_id})
   end
 
@@ -44,6 +42,7 @@ defmodule GamePlatform.Game do
 
   @impl true
   def init({game_id, %GameServerConfig{} = server_config}) do
+    # TODO: Validate config
     # Initialize the actual game state in continue in case this takes a while.
     {:ok, initial_state(game_id, server_config), {:continue, {:init_game, server_config}}}
   end

@@ -55,6 +55,9 @@ defmodule WebGamesWeb.Minesweeper.Play do
   end
 
   def process_event({:open, cells}, grid) do
+    # TODO: The assigns here shouldn't be an abstract state like in GameState
+    # It should be _literally_ what is displayed.
+    # Each cell should have set color, bg color, display value, etc.
     grid = Enum.into(cells, grid, fn %{coord: coord, value: value} ->
       case grid[coord] do
         %{has_mine?: true} -> {coord, %{grid[coord] | opened?: true}}

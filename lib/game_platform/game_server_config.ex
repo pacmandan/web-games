@@ -1,4 +1,5 @@
 defmodule GamePlatform.GameServerConfig do
+  # TODO: Deprecate this module
   defstruct [
     start_player_id: nil,
     game_state_module: nil,

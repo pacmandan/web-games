@@ -8,6 +8,8 @@ defmodule GamePlatform.GameState do
   @callback add_player(state :: term(), player_id :: String.t()) ::
     {:ok, notifications :: list(term()), state :: term()}
 
+  @callback take_notifications(state :: term()) :: {notifications :: term(), state :: term()}
+
   @callback init(term()) :: term()
 
   defmacro __using__(_opts) do
