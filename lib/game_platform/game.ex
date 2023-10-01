@@ -128,18 +128,19 @@ defmodule GamePlatform.Game do
     {:stop, reason, stopped_state}
   end
 
-  # TODO: Move this into the Notifications module
+  # TODO: Move this to it's own module/behaviour
+  # Allow for "plugins" to let notifications go through different mediums
+  # Internal pubsub, redis, external pubsub, etc.
   defp send_notifications(notifications, state) do
-    # TODO: Collate notifications - only ONE sent per player per update
     # TODO: Keep a "version" of game state that is sent with a notification
     for n <- notifications do
       case n.to do
         :all ->
           IO.inspect("BROADCASTING TO ALL")
-          Phoenix.PubSub.broadcast(state.config.pubsub_name, "game:#{state.game_id}", {:game_event, state.game_id, n.event})
+          Phoenix.PubSub.broadcast(state.config.pubsub_name, "game:#{state.game_id}", {:game_event, state.game_id, n.msgs})
         {:player, player_id} ->
           IO.inspect("BROADCASTING TO PLAYER #{player_id}")
-          Phoenix.PubSub.broadcast(state.config.pubsub_name, "game:#{state.game_id}:player:#{player_id}", {:game_event, state.game_id, n.event})
+          Phoenix.PubSub.broadcast(state.config.pubsub_name, "game:#{state.game_id}:player:#{player_id}", {:game_event, state.game_id, n.msgs})
         _ -> :ok
       end
     end

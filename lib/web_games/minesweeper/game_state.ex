@@ -52,7 +52,6 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   defp get_adjacent_coords({x, y}) do
-    IO.inspect({x, y})
     for dx <- -1..1, dy <- -1..1 do
       {x + dx, y + dy}
     end
@@ -102,9 +101,13 @@ defmodule WebGames.Minesweeper.GameState do
 
   @impl true
   def player_connected(game, player_id) do
+    # Pre-calculate this so we don't do it inside the loop a bunch of times.
+    show_mines? = game.state not in [:win, :lose]
+
     display_grid = Enum.map(game.grid, fn {coord, cell} ->
-      %{coord: coord, display: Cell.display_value(cell)}
+      {coord, Cell.display(cell, show_mines?)}
     end)
+    |> Enum.into(%{})
 
     sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines}
 
@@ -129,7 +132,7 @@ defmodule WebGames.Minesweeper.GameState do
     |> update_state()
     |> take_notifications()
 
-    Display.display_grid(g)
+    Display.display_grid(g, true)
 
     {:ok, n, g}
   end
@@ -141,7 +144,7 @@ defmodule WebGames.Minesweeper.GameState do
     |> update_state()
     |> take_notifications()
 
-    Display.display_grid(g)
+    Display.display_grid(g, true)
 
     {:ok, n, g}
   end
@@ -151,7 +154,7 @@ defmodule WebGames.Minesweeper.GameState do
     {n, g} = toggle_flag(space, game)
     |> take_notifications()
 
-    Display.display_grid(g)
+    Display.display_grid(g, true)
 
     {:ok, n, g}
   end
@@ -162,17 +165,17 @@ defmodule WebGames.Minesweeper.GameState do
       {:noop, _} -> game
       {:ok, cell} ->
         %__MODULE__{game | grid: Map.replace(game.grid, coord, cell)}
-        |> add_notification(:all, {:click, %{coord: coord}})
+        |> add_notification(:all, {:click, %{coord => cell.clicked?}})
     end
   end
 
   defp try_open(coord, game) do
     {opened_cells, game} = open(coord, game)
 
-    if Enum.count(opened_cells) > 0 do
-      game |> add_notification(:all, {:open, opened_cells})
-    else
+    if Enum.empty?(opened_cells) do
       game
+    else
+      game |> add_notification(:all, {:open, opened_cells |> Enum.into(%{})})
     end
   end
 
@@ -181,21 +184,19 @@ defmodule WebGames.Minesweeper.GameState do
       {:error, _} -> {opened_cells, game}
       {:noop, _} -> {opened_cells, game}
       {:ok, cell} ->
-        {[%{coord: coord, value: cell.value} | opened_cells], %__MODULE__{game | grid: Map.replace(game.grid, coord, cell)}}
-        #|> add_notification(:all, {:open, %{coord: coord, value: cell.value}})
+        {[{coord, cell.value} | opened_cells], %__MODULE__{game | grid: Map.replace(game.grid, coord, cell)}}
       {:cascade, cell} ->
         game = %__MODULE__{game | grid: Map.replace(game.grid, coord, cell)}
-        opened_cells = [%{coord: coord, value: cell.value} | opened_cells]
-        #|> add_notification(:all, {:open, %{coord: coord, value: cell.value}})
+        opened_cells = [{coord, cell.value} | opened_cells]
 
         get_adjacent_coords(coord)
         |> Enum.reduce({opened_cells, game}, fn adj_coord, {opened_cells, game} -> open(adj_coord, game, opened_cells) end)
       {:boom, cell} ->
         game = %__MODULE__{game | state: :lose, grid: Map.replace(game.grid, coord, cell)}
-        #|> add_notification(:all, {:open, %{coord: coord, value: cell.value}})
-        |> add_notification(:all, {:lose, %{coord: coord, has_mine?: cell.has_mine?}})
+        |> add_notification(:all, {:show_mines, get_mine_locations(game.grid)})
+        |> add_notification(:all, {:game_over, :lose})
 
-        {[%{coord: coord, value: cell.value} | opened_cells], game}
+        {[{coord, cell.value} | opened_cells], game}
     end
   end
 
@@ -204,28 +205,41 @@ defmodule WebGames.Minesweeper.GameState do
       {:error, _} -> game
       {:ok, cell} ->
         %__MODULE__{game | grid: Map.replace(game.grid, coord, cell)}
-        |> add_notification(:all, {:flag, %{coord: coord, flagged?: cell.flagged?}})
+        |> add_notification(:all, {:flag, %{coord => cell.flagged?}})
     end
   end
 
-  defp update_state(%__MODULE__{state: :lose} = game), do: game
-  defp update_state(%__MODULE__{state: state} = game) do
-    %__MODULE__{game | state: if(has_won?(game), do: :play, else: state)}
+  defp get_mine_locations(grid) do
+    grid
+    |> Enum.filter(fn {_, cell} -> cell.has_mine? end)
+    |> Enum.map(fn {coord, _} -> coord end)
   end
 
+  defp update_state(%__MODULE__{state: :lose} = game), do: game
+  defp update_state(%__MODULE__{state: :win} = game), do: game
+  defp update_state(%__MODULE__{state: _state} = game) do
+    if has_won?(game) do
+      %__MODULE__{game | state: :win}
+      |> add_notification(:all, {:game_over, :win})
+    else
+      %__MODULE__{game | state: :play}
+    end
+  end
+
+  # We win if all cells that don't have mines are open
   defp has_won?(game) do
     Enum.count(game.grid, fn {_, cell} ->
       !cell.has_mine? && !cell.opened?
-    end) > 0
+    end) == 0
   end
 
   @impl true
   def take_notifications(game) do
-    {Enum.reverse(game.notifications), struct(game, notifications: [])}
+    {Notification.collate_notifications(game.notifications), struct(game, notifications: [])}
   end
 
-  defp add_notification(game, to, event) do
-    %__MODULE__{game | notifications: [Notification.build(to, event) | game.notifications]}
+  defp add_notification(game, to, msg) do
+    %__MODULE__{game | notifications: [Notification.build(to, msg) | game.notifications]}
   end
 
   @impl true

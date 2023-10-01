@@ -53,4 +53,22 @@ defmodule WebGames.Minesweeper.Cell do
       true -> "."
     end
   end
+
+  def display(nil, _), do: nil
+  def display(%__MODULE__{} = cell, show_unopened_mines?) do
+    %{
+      opened?: cell.opened?,
+      clicked?: cell.clicked?,
+      flagged?: cell.flagged?,
+      value: cond do
+        cell.opened? && !cell.has_mine? -> nil
+        cell.opened? -> cell.value
+        true -> nil
+      end,
+      has_mine?: cond do
+        cell.opened? || show_unopened_mines? -> cell.has_mine?
+        true -> nil
+      end
+    }
+  end
 end

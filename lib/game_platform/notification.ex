@@ -1,35 +1,36 @@
 defmodule GamePlatform.Notification do
   defstruct [
     to: :all,
-    event: nil,
+    msgs: [],
   ]
 
   @type t :: %__MODULE__{
-    to: atom() | String.t(),
-    event: any(),
+    to: any(),
+    msgs: list(any()),
   }
 
-  def build(to, event), do: %__MODULE__{to: to, event: event}
+  def build(to), do: build(to, [])
+  def build(to, msgs) when is_list(msgs), do: %__MODULE__{to: to, msgs: msgs}
+  def build(to, msg), do: %__MODULE__{to: to, msgs: [msg]}
 
-  def game_over(), do: %__MODULE__{to: :all, event: :game_over}
+  def add_msg(%__MODULE__{msgs: msgs} = n, new_msgs) when is_list(new_msgs), do: %__MODULE__{n | msgs: new_msgs ++ msgs}
+  def add_msg(%__MODULE__{msgs: msgs} = n, new_msg), do: %__MODULE__{n | msgs: [new_msg | msgs]}
 
-  # def add(to, event, notifications) do
-  #   if Map.has_key?(notifications, to) do
-  #     Map.replace(notifications, to, [event | notifications[to]])
-  #   else
-  #     Map.put(notifications, to, [event])
-  #   end
-  # end
+  def collate_notifications(notifications) do
+    # Go from a flat map of notifications...
+    # [%{to: a, msgs: [1]}, %{to: a, msgs: [2]}, %{to: b, msgs: [3]}]
+    # ...to a collated list of notifications
+    # [%{to: a, msgs: [1, 2]}, %{to: b, msgs: [3]}]
 
-  # @spec collate(list(__MODULE__.t())) :: %{ term() => list(__MODULE__.t())}
-  # def collate(notifications) do
-  #   notifications
-  #   |> Enum.reduce(%{}, fn n, acc ->
-  #     if Map.has_key?(acc, n.to) do
-  #       Map.replace(acc, n.to, [n | acc[n.to]])
-  #     else
-  #       Map.put(acc, n.to, [n])
-  #     end
-  #   end)
-  # end
+    notifications
+    |> Enum.reverse()
+    |> Enum.reduce(%{}, fn n, acc ->
+      if acc[n.to] do
+        %{acc | n.to => add_msg(acc[n.to], n.msgs)}
+      else
+        Map.put(acc, n.to, n)
+      end
+    end)
+    |> Map.values()
+  end
 end

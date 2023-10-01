@@ -1,7 +1,9 @@
 <div>
   Game ID: <%= @game_id %><br/>
   Player ID: <%= @player_id %><br/>
-  <WebGamesWeb.MinesweeperComponents.grid grid={@grid} height={@height} width={@width} :if={!is_nil(@grid)} />
+  <WebGamesWeb.MinesweeperComponents.grid grid={@display_grid} height={@height} width={@width} :if={!is_nil(@grid)} />
+  <br/>
+  <%= @status %>
   <br/>
   EVENTS:<br/>
   <%= @events %>
