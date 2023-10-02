@@ -100,7 +100,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def player_connected(game, player_id) do
+  def player_connected(game, player_id, pid) do
     # Pre-calculate this so we don't do it inside the loop a bunch of times.
     show_mines? = game.state not in [:win, :lose]
 
@@ -115,17 +115,19 @@ defmodule WebGames.Minesweeper.GameState do
     |> add_notification({:player, player_id}, {:sync, sync_data})
     |> take_notifications()
 
+    # Process.monitor(pid)
+
     {:ok, n, g}
   end
 
   # If a game is over, do nothing.
   @impl true
-  def handle_event(_, %__MODULE__{state: :win} = game), do: {:ok, [], game}
+  def handle_event(%__MODULE__{state: :win} = game, _), do: {:ok, [], game}
   @impl true
-  def handle_event(_, %__MODULE__{state: :lose} = game), do: {:ok, [], game}
+  def handle_event(%__MODULE__{state: :lose} = game, _), do: {:ok, [], game}
 
   @impl true
-  def handle_event({:open, space}, %__MODULE__{state: :init} = game) do
+  def handle_event(%__MODULE__{state: :init} = game, {:open, space}) do
     {n, g} = begin_game(game, space)
     |> then(&(click_cell(space, &1)))
     |> then(&(try_open(space, &1)))
@@ -138,7 +140,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def handle_event({:open, space}, %__MODULE__{state: :play} = game) do
+  def handle_event(%__MODULE__{state: :play} = game, {:open, space}) do
     {n, g} = click_cell(space, game)
     |> then(&(try_open(space, &1)))
     |> update_state()
@@ -150,7 +152,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def handle_event({:flag, space}, %__MODULE__{} = game) do
+  def handle_event(%__MODULE__{} = game, {:flag, space}) do
     {n, g} = toggle_flag(space, game)
     |> take_notifications()
 

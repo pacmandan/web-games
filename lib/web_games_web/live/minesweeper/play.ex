@@ -22,7 +22,7 @@ defmodule WebGamesWeb.Minesweeper.Play do
         Phoenix.PubSub.subscribe(WebGames.PubSub, "game:#{game_id}")
         Phoenix.PubSub.subscribe(WebGames.PubSub, "game:#{game_id}:player:#{player_id}")
         IO.inspect("SENDING PLAYER CONNECTED")
-        Game.player_connected(player_id, game_id)
+        Game.player_connected(player_id, game_id, self())
       end
       {:ok, assign(socket, %{game_id: game_id, player_id: player_id, events: [], grid: nil, status: :play, clicks_enabled?: true, display_grid: nil})}
     else
@@ -34,6 +34,14 @@ defmodule WebGamesWeb.Minesweeper.Play do
     x = String.to_integer(x)
     y = String.to_integer(y)
     Game.send_event({:open, {x, y}}, socket.assigns[:player_id], socket.assigns[:game_id])
+    {:noreply, socket}
+  end
+
+  def handle_event("flag", %{"x" => x, "y" => y}, socket) do
+    IO.inspect("HANDLING FLAG EVENT!!")
+    x = String.to_integer(x)
+    y = String.to_integer(y)
+    Game.send_event({:flag, {x, y}}, socket.assigns[:player_id], socket.assigns[:game_id])
     {:noreply, socket}
   end
 
@@ -129,6 +137,7 @@ defmodule WebGamesWeb.Minesweeper.Play do
   def text_color(%{value: value}) when value in [8, "8"], do: "text-gray-700"
   def text_color(_), do: "text-black"
 
+  def display_value(%{has_mine?: true, flagged?: true}), do: "O"
   def display_value(%{has_mine?: true}), do: "X"
   def display_value(%{flagged?: true}), do: "F"
   def display_value(%{value: 0}), do: nil

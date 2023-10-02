@@ -1,8 +1,8 @@
 defmodule GamePlatform.GameState do
-  @callback handle_event(event :: term(), state :: term()) ::
+  @callback handle_event(state :: term(), event :: term()) ::
     {:ok, notifications :: list(term()), state :: term()}
 
-  @callback player_connected(state :: term(), player_id :: String.t()) ::
+  @callback player_connected(state :: term(), player_id :: String.t(), pid :: term()) ::
     {:ok, notifications :: list(term()), state :: term()}
 
   @callback add_player(state :: term(), player_id :: String.t()) ::

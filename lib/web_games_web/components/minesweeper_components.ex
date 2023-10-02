@@ -17,9 +17,10 @@ defmodule WebGamesWeb.MinesweeperComponents do
     ~H"""
     <div class={"w-8 h-8 #{@cell.background_color} #{@cell.text_color} #{@cell.border_color} border"}
       phx-click="click"
+      phx-hook="MinesweeperFlag"
       phx-value-x={@x}
       phx-value-y={@y}
-      disabled={not @cell.clickable?}
+      id={"cell:#{@x}:#{@y}"}
     >
       <%= @cell.value %>
     </div>
