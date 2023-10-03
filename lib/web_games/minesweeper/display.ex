@@ -3,14 +3,14 @@ defmodule WebGames.Minesweeper.Display do
     num_width_digits = num_digits(game.w - 1)
     display_rows = Map.keys(game.grid)
     |> Enum.sort_by(fn {x, y} -> {y, x} end)
-    |> Enum.map(fn space -> cell_to_string(game.grid[space], game.state, cheat?) end)
+    |> Enum.map(fn space -> cell_to_string(game.grid[space], game.status, cheat?) end)
     |> Enum.chunk_every(game.w)
     |> Enum.zip(0..(game.h - 1))
     |> Enum.map(fn {row, index} ->
       "#{List.duplicate(" ", num_width_digits - num_digits(index)) |> Enum.join()}#{index}|#{Enum.join(row)}"
     end)
 
-    display_state = case game.state do
+    display_state = case game.status do
       :win -> "WIN!"
       :lose -> "LOSE!"
       _ -> ""

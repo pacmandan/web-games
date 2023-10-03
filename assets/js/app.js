@@ -22,6 +22,7 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
+// TODO: Allow loading game-specific hooks from separate files instead of all of them all at once.
 let Hooks = {}
 Hooks.MinesweeperFlag = {
   mounted() {

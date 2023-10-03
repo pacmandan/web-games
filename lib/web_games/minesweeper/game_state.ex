@@ -4,7 +4,7 @@ defmodule WebGames.Minesweeper.GameState do
     h: 0,
     num_mines: 10,
     grid: %{},
-    state: :init,
+    status: :init,
     notifications: [],
     player: nil,
   ]
@@ -25,7 +25,7 @@ defmodule WebGames.Minesweeper.GameState do
     h: integer(),
     num_mines: integer(),
     grid: grid_t(),
-    state: :init | :play | :win | :lose,
+    status: :init | :play | :win | :lose,
   }
 
   @impl true
@@ -82,7 +82,7 @@ defmodule WebGames.Minesweeper.GameState do
       |> Enum.reduce(grid, fn {adj_coord, cell}, grid -> Map.replace(grid, adj_coord, cell) end)
     end)
 
-    %__MODULE__{game | grid: prepared_grid, state: :play}
+    %__MODULE__{game | grid: prepared_grid, status: :play}
   end
 
   defp possible_mine_spaces(grid, num_mines, start_space) do
@@ -102,14 +102,14 @@ defmodule WebGames.Minesweeper.GameState do
   @impl true
   def player_connected(game, player_id, pid) do
     # Pre-calculate this so we don't do it inside the loop a bunch of times.
-    show_mines? = game.state not in [:win, :lose]
+    show_mines? = game.status in [:win, :lose]
 
     display_grid = Enum.map(game.grid, fn {coord, cell} ->
       {coord, Cell.display(cell, show_mines?)}
     end)
     |> Enum.into(%{})
 
-    sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines}
+    sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines, status: game.status}
 
     {n, g} = game
     |> add_notification({:player, player_id}, {:sync, sync_data})
@@ -122,16 +122,16 @@ defmodule WebGames.Minesweeper.GameState do
 
   # If a game is over, do nothing.
   @impl true
-  def handle_event(%__MODULE__{state: :win} = game, _), do: {:ok, [], game}
+  def handle_event(%__MODULE__{status: :win} = game, _), do: {:ok, [], game}
   @impl true
-  def handle_event(%__MODULE__{state: :lose} = game, _), do: {:ok, [], game}
+  def handle_event(%__MODULE__{status: :lose} = game, _), do: {:ok, [], game}
 
   @impl true
-  def handle_event(%__MODULE__{state: :init} = game, {:open, space}) do
+  def handle_event(%__MODULE__{status: :init} = game, {:open, space}) do
     {n, g} = begin_game(game, space)
     |> then(&(click_cell(space, &1)))
     |> then(&(try_open(space, &1)))
-    |> update_state()
+    |> update_status()
     |> take_notifications()
 
     Display.display_grid(g, true)
@@ -140,10 +140,10 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def handle_event(%__MODULE__{state: :play} = game, {:open, space}) do
+  def handle_event(%__MODULE__{status: :play} = game, {:open, space}) do
     {n, g} = click_cell(space, game)
     |> then(&(try_open(space, &1)))
-    |> update_state()
+    |> update_status()
     |> take_notifications()
 
     Display.display_grid(g, true)
@@ -194,7 +194,7 @@ defmodule WebGames.Minesweeper.GameState do
         get_adjacent_coords(coord)
         |> Enum.reduce({opened_cells, game}, fn adj_coord, {opened_cells, game} -> open(adj_coord, game, opened_cells) end)
       {:boom, cell} ->
-        game = %__MODULE__{game | state: :lose, grid: Map.replace(game.grid, coord, cell)}
+        game = %__MODULE__{game | status: :lose, grid: Map.replace(game.grid, coord, cell)}
         |> add_notification(:all, {:show_mines, get_mine_locations(game.grid)})
         |> add_notification(:all, {:game_over, :lose})
 
@@ -217,14 +217,14 @@ defmodule WebGames.Minesweeper.GameState do
     |> Enum.map(fn {coord, _} -> coord end)
   end
 
-  defp update_state(%__MODULE__{state: :lose} = game), do: game
-  defp update_state(%__MODULE__{state: :win} = game), do: game
-  defp update_state(%__MODULE__{state: _state} = game) do
+  defp update_status(%__MODULE__{status: :lose} = game), do: game
+  defp update_status(%__MODULE__{status: :win} = game), do: game
+  defp update_status(%__MODULE__{status: _status} = game) do
     if has_won?(game) do
-      %__MODULE__{game | state: :win}
+      %__MODULE__{game | status: :win}
       |> add_notification(:all, {:game_over, :win})
     else
-      %__MODULE__{game | state: :play}
+      %__MODULE__{game | status: :play}
     end
   end
 

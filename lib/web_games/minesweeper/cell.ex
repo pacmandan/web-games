@@ -61,7 +61,7 @@ defmodule WebGames.Minesweeper.Cell do
       clicked?: cell.clicked?,
       flagged?: cell.flagged?,
       value: cond do
-        cell.opened? && !cell.has_mine? -> nil
+        cell.opened? && cell.has_mine? -> nil
         cell.opened? -> cell.value
         true -> nil
       end,

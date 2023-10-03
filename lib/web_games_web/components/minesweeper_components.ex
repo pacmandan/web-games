@@ -1,6 +1,7 @@
 defmodule WebGamesWeb.MinesweeperComponents do
   use WebGamesWeb, :html
 
+  # TODO: Convert to LiveComponent to make it so we don't re-render the whole grid with every update.
   def grid(assigns) do
     ~H"""
     <table id="grid">

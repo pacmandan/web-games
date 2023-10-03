@@ -92,8 +92,8 @@ defmodule WebGamesWeb.Minesweeper.Play do
     %{assigns | status: :win, clicks_enabled?: false}
   end
 
-  def process_event({:sync, %{grid: grid, height: h, width: w, num_mines: n}}, assigns) do
-    Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n})
+  def process_event({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status}}, assigns) do
+    Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n, status: status})
   end
 
   def process_event({:show_mines, coord_list}, %{grid: grid} = assigns) do
