@@ -7,6 +7,7 @@ defmodule WebGames.Minesweeper.GameState do
     status: :init,
     notifications: [],
     player: nil,
+    start_time: nil,
   ]
 
   use GamePlatform.GameState
@@ -14,7 +15,6 @@ defmodule WebGames.Minesweeper.GameState do
   alias WebGames.Minesweeper.Config
   alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
-  alias WebGames.Minesweeper.Player
   alias GamePlatform.Notification
 
   @type notification_t :: {String.t() | atom(), any()}
@@ -27,12 +27,19 @@ defmodule WebGames.Minesweeper.GameState do
     num_mines: integer(),
     grid: grid_t(),
     status: :init | :play | :win | :lose,
+    start_time: DateTime.t(),
   }
 
   @impl true
   def init(config) do
     if Config.valid?(config) do
-      game = %__MODULE__{w: config.width, h: config.height, num_mines: config.num_mines, grid: create_blank_grid(config)}
+      game = %__MODULE__{
+        start_time: DateTime.utc_now(),
+        w: config.width,
+        h: config.height,
+        num_mines: config.num_mines,
+        grid: create_blank_grid(config),
+      }
       Display.display_grid(game)
       {:ok, game}
     else
@@ -101,7 +108,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def player_connected(game, player_id, _pid) do
+  def player_connected(game, player_id) do
     if player_id == game.player do
       # Pre-calculate this so we don't do it inside the loop a bunch of times.
       show_mines? = game.status in [:win, :lose]
@@ -226,6 +233,7 @@ defmodule WebGames.Minesweeper.GameState do
     if has_won?(game) do
       %__MODULE__{game | status: :win}
       |> add_notification(:all, {:game_over, :win})
+      |> add_notification(:all, {:show_mines, get_mine_locations(game.grid)})
     else
       %__MODULE__{game | status: :play}
     end
@@ -247,30 +255,29 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def join_game(%__MODULE__{player: nil} = game, player) do
-    {n, g} = %__MODULE__{game | player: Player.get_id(player)}
-    |> add_notification(:all, {:added, player})
+  def join_game(%__MODULE__{player: nil} = game, player_id) do
+    {n, g} = %__MODULE__{game | player: player_id}
+    |> add_notification(:all, {:added, player_id})
     |> take_notifications()
 
     topic_refs = [
       :all,
-      {:player, Player.get_id(player)}
+      {:player, player_id}
     ]
 
     {:ok, {topic_refs, %{}}, n, g}
   end
 
   @impl true
-  def join_game(%__MODULE__{player: player} = game, new_player) do
-    if new_player == player do
-      topic_refs = [
-        :all,
-        {:player, Player.get_id(player)}
-      ]
+  def join_game(%__MODULE__{player: existing_player_id} = game, player_id) when player_id == existing_player_id do
+    topic_refs = [
+      :all,
+      {:player, player_id}
+    ]
 
-      {:ok, {topic_refs, %{}}, [], game}
-    else
-      {:error, :game_full}
-    end
+    {:ok, {topic_refs, %{}}, [], game}
   end
+
+  @impl true
+  def join_game(_, _), do: {:error, :game_full}
 end

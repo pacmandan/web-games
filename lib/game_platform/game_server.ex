@@ -71,7 +71,7 @@ defmodule GamePlatform.GameServer do
   end
 
   @impl true
-  def handle_cast({:remove_player, player_id}, state) do
+  def handle_cast({:leave_game, player_id}, state) do
     do_remove_player(player_id, state)
   end
 
@@ -99,7 +99,7 @@ defmodule GamePlatform.GameServer do
     new_state = state
     |> cancel_player_timeout(player_id)
 
-    case state.game_module.player_connected(state.game_state, player_id, pid) do
+    case state.game_module.player_connected(state.game_state, player_id) do
       {:ok, notifications, new_game_state} ->
         # Monitor connected player to see if/when they disconnect
         connected_players = Map.put(new_state.connected_players, Process.monitor(pid), player_id)
@@ -144,7 +144,7 @@ defmodule GamePlatform.GameServer do
   @impl true
   def handle_info({:game_event, event}, state) do
     # TODO: When adding "from", use :game
-    case state.game_module.handle_event(state.game_state, event) do
+    case state.game_module.handle_event(state.game_state, :game, event) do
       {:ok, notifications, new_game_state} ->
         # Internal game events do not reset the timer.
         # Process.cancel_timer(state.timeout_ref)
@@ -172,16 +172,14 @@ defmodule GamePlatform.GameServer do
   defp do_remove_player(player_id, state) do
     monitor_ref = Enum.find(state.connected_players, fn {_, id} -> player_id == id end)
     connected_players = Map.drop(state.connected_players, [monitor_ref])
-    {timer_ref, player_timeout_refs} = Map.pop(state.player_timeout_refs, player_id)
 
-    unless timer_ref |> is_nil(), do: Process.cancel_timer(timer_ref)
     unless monitor_ref |> is_nil(), do: Process.demonitor(monitor_ref)
 
     new_state = state
     |> Map.replace(:connected_players, connected_players)
-    |> Map.replace(:player_timeout_refs, player_timeout_refs)
+    |> cancel_player_timeout(player_id)
 
-    case state.game_module.remove_player(new_state.game_state, player_id) do
+    case state.game_module.leave_game(new_state.game_state, player_id) do
       {:ok, notifications, new_game_state} ->
         send_notifications(notifications, new_state)
 
@@ -238,5 +236,9 @@ defmodule GamePlatform.GameServer do
     unless state.timeout_ref |> is_nil(), do: Process.cancel_timer(state.timeout_ref)
     # Map.put(state, :timeout_ref, nil)
     state
+  end
+
+  def send_event_after(event, time) do
+    Process.send_after(self(), {:game_event, event}, time)
   end
 end

@@ -131,7 +131,7 @@ defmodule WebGamesWeb.Minesweeper.Play do
     %{
       background_color: background_color(cell),
       text_color: text_color(cell),
-      value: display_value(cell),
+      value: display_value(cell, assigns.status),
       clickable?: assigns.clicks_enabled? && not (cell.opened?),
       border_color: "border-black",
     }
@@ -153,11 +153,12 @@ defmodule WebGamesWeb.Minesweeper.Play do
   def text_color(%{value: value}) when value in [8, "8"], do: "text-gray-700"
   def text_color(_), do: "text-black"
 
-  def display_value(%{has_mine?: true, flagged?: true}), do: "O"
-  def display_value(%{has_mine?: true}), do: "X"
-  def display_value(%{flagged?: true}), do: "F"
-  def display_value(%{value: 0}), do: nil
-  def display_value(%{value: "0"}), do: nil
-  def display_value(%{value: v}), do: v
-  def display_value(_), do: nil
+  def display_value(%{has_mine?: true}, :win), do: "+"
+  def display_value(%{has_mine?: true, flagged?: true}, _), do: "O"
+  def display_value(%{has_mine?: true}, _), do: "X"
+  def display_value(%{flagged?: true}, _), do: "F"
+  def display_value(%{value: 0}, _), do: nil
+  def display_value(%{value: "0"}, _), do: nil
+  def display_value(%{value: v}, _), do: v
+  def display_value(_, _), do: nil
 end

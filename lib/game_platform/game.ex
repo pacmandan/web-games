@@ -15,10 +15,6 @@ defmodule GamePlatform.Game do
     GenServer.cast(GameServer.via_tuple(game_id), {:player_connected, player_id, pid})
   end
 
-  def send_event_after(event, time) do
-    Process.send_after(self(), {:game_event, event}, time)
-  end
-
   def send_event_after(event, game_id, time) do
     case Registry.lookup(@registry, game_id) do
       [] -> {:error, :not_found}
