@@ -9,8 +9,8 @@ defmodule WebGames do
 
   alias WebGames.Minesweeper.GameState, as: MinesweeperState
 
-  def start_minesweeper(player_id, minesweeper_config) do
-
+  def start_minesweeper(_player_id, minesweeper_config) do
+    # TODO: Include player id in config
     server_config = %{
       pubsub: WebGames.PubSub,
     }

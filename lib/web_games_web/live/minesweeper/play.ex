@@ -15,21 +15,38 @@ defmodule WebGamesWeb.Minesweeper.Play do
     :display_grid,
   ]
 
-  def mount(_params, %{"game_id" => game_id, "player_id" => player_id}, socket) do
-    IO.inspect("LIVE VIEW -- GAME ID: #{game_id} -- PLAYER ID: #{player_id}")
+  @impl true
+  def mount(_params, %{"game_id" => game_id, "player_id" => player_id, "topics" => topics, "player_opts" => _player_opts}, socket) do
     if Game.game_exists?(game_id) do
       if connected?(socket) do
-        Phoenix.PubSub.subscribe(WebGames.PubSub, "game:#{game_id}")
-        Phoenix.PubSub.subscribe(WebGames.PubSub, "game:#{game_id}:player:#{player_id}")
-        IO.inspect("SENDING PLAYER CONNECTED")
+        Enum.each(topics, fn topic -> Phoenix.PubSub.subscribe(WebGames.PubSub, topic) end)
         Game.player_connected(player_id, game_id, self())
       end
-      {:ok, assign(socket, %{game_id: game_id, player_id: player_id, events: [], grid: nil, status: :play, clicks_enabled?: true, display_grid: nil})}
+      {:ok, assign(socket, init_assigns(game_id, player_id))}
     else
       {:ok, redirect(socket, to: "/select-game")}
     end
   end
 
+  # If we don't have the proper session for some reason.
+  @impl true
+  def mount(_params, _session, socket) do
+    {:ok, redirect(socket, to: "/select-game")}
+  end
+
+  def init_assigns(game_id, player_id) do
+    %{
+      game_id: game_id,
+      player_id: player_id,
+      events: [],
+      grid: nil,
+      display_grid: nil,
+      status: :play,
+      clicks_enabled?: true,
+    }
+  end
+
+  @impl true
   def handle_event("click", %{"x" => x, "y" => y}, socket) do
     x = String.to_integer(x)
     y = String.to_integer(y)
@@ -37,17 +54,16 @@ defmodule WebGamesWeb.Minesweeper.Play do
     {:noreply, socket}
   end
 
+  @impl true
   def handle_event("flag", %{"x" => x, "y" => y}, socket) do
-    IO.inspect("HANDLING FLAG EVENT!!")
     x = String.to_integer(x)
     y = String.to_integer(y)
     Game.send_event({:flag, {x, y}}, socket.assigns[:player_id], socket.assigns[:game_id])
     {:noreply, socket}
   end
 
+  @impl true
   def handle_info({:game_event, _game_id, msgs}, socket) do
-    IO.inspect("GOT AN EVENT!!!")
-
     new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), fn msg, acc ->
       process_event(msg, acc)
     end)
@@ -113,17 +129,17 @@ defmodule WebGamesWeb.Minesweeper.Play do
 
   def render_cell(cell, assigns) do
     %{
-      background_color: cond do
-        cell.opened? && cell.has_mine? -> "bg-red-400"
-        cell.opened? -> "bg-gray-300"
-        true -> "bg-gray-500"
-      end,
+      background_color: background_color(cell),
       text_color: text_color(cell),
       value: display_value(cell),
       clickable?: assigns.clicks_enabled? && not (cell.opened?),
       border_color: "border-black",
     }
   end
+
+  def background_color(%{opened?: true, has_mine?: true}), do: "bg-red-400"
+  def background_color(%{opened?: true}), do: "bg-gray-300"
+  def background_color(_), do: "bg-gray-500"
 
   def text_color(%{has_mine?: true}), do: "text-black"
   def text_color(%{value: value}) when value in [0, "0"], do: "text-black"

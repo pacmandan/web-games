@@ -1,34 +1,36 @@
 defmodule WebGamesWeb.PlayController do
   use WebGamesWeb, :controller
 
+  alias GamePlatform.Game
+  alias GamePlatform.Player
+
   import Phoenix.LiveView.Controller
 
   def connect_to_game(conn, %{"game_id" => game_id}) do
-    # TODO: Check if game exists
-    if GamePlatform.Game.game_exists?(game_id) do
-            # TODO: Check if player on game exists
+    if Game.game_exists?(game_id) do
+      {player_id, conn} = get_player_id(conn)
+      {:ok, topics, opts} = Game.join_game(player_id, game_id)
 
-      IO.inspect("PLAY CONTROLLER")
-      IO.inspect("SESSION PLAYER ID: #{get_session(conn, "player_id")}")
-      IO.inspect("SESSION GAME ID: #{get_session(conn, "game_id")}")
-      IO.inspect("PARAM GAME ID: #{game_id}")
-
-      if get_session(conn, "player_id") |> is_nil() do
-        IO.inspect("PUTTING SESSION!")
-        player_id = GamePlatform.Player.generate_id()
-        GamePlatform.Game.add_player(player_id, game_id)
-
-        conn
-        |> put_session("player_id", player_id)
-        |> put_session("game_id", game_id)
-      else
-        # Game already exists
-        conn
-      end
+      conn
+      |> put_session("game_id", game_id)
+      |> put_session("player_opts", opts)
+      |> put_session("topics", topics)
+      # TODO: Make which game to render generic somehow
       |> live_render(WebGamesWeb.Minesweeper.Play)
     else
       conn
+      |> clear_session()
       |> redirect(to: "/select-game")
+    end
+  end
+
+  def get_player_id(conn) do
+    player_id = get_session(conn, "player_id")
+    if player_id |> is_nil() do
+      player_id = Player.generate_id()
+      {player_id, conn |> put_session("player_id", player_id)}
+    else
+      {player_id, conn}
     end
   end
 end

@@ -14,6 +14,7 @@ defmodule WebGames.Minesweeper.GameState do
   alias WebGames.Minesweeper.Config
   alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
+  alias WebGames.Minesweeper.Player
   alias GamePlatform.Notification
 
   @type notification_t :: {String.t() | atom(), any()}
@@ -100,34 +101,36 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def player_connected(game, player_id, pid) do
-    # Pre-calculate this so we don't do it inside the loop a bunch of times.
-    show_mines? = game.status in [:win, :lose]
+  def player_connected(game, player_id, _pid) do
+    if player_id == game.player do
+      # Pre-calculate this so we don't do it inside the loop a bunch of times.
+      show_mines? = game.status in [:win, :lose]
 
-    display_grid = Enum.map(game.grid, fn {coord, cell} ->
-      {coord, Cell.display(cell, show_mines?)}
-    end)
-    |> Enum.into(%{})
+      display_grid = Enum.map(game.grid, fn {coord, cell} ->
+        {coord, Cell.display(cell, show_mines?)}
+      end)
+      |> Enum.into(%{})
 
-    sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines, status: game.status}
+      sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines, status: game.status}
 
-    {n, g} = game
-    |> add_notification({:player, player_id}, {:sync, sync_data})
-    |> take_notifications()
+      {n, g} = game
+      |> add_notification({:player, player_id}, {:sync, sync_data})
+      |> take_notifications()
 
-    # Process.monitor(pid)
-
-    {:ok, n, g}
+      {:ok, n, g}
+    else
+      {:error, :unknown_player}
+    end
   end
 
   # If a game is over, do nothing.
   @impl true
-  def handle_event(%__MODULE__{status: :win} = game, _), do: {:ok, [], game}
+  def handle_event(%__MODULE__{status: :win} = game, _, _), do: {:ok, [], game}
   @impl true
-  def handle_event(%__MODULE__{status: :lose} = game, _), do: {:ok, [], game}
+  def handle_event(%__MODULE__{status: :lose} = game, _, _), do: {:ok, [], game}
 
   @impl true
-  def handle_event(%__MODULE__{status: :init} = game, {:open, space}) do
+  def handle_event(%__MODULE__{status: :init} = game, _, {:open, space}) do
     {n, g} = begin_game(game, space)
     |> then(&(click_cell(space, &1)))
     |> then(&(try_open(space, &1)))
@@ -140,7 +143,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def handle_event(%__MODULE__{status: :play} = game, {:open, space}) do
+  def handle_event(%__MODULE__{status: :play} = game, _, {:open, space}) do
     {n, g} = click_cell(space, game)
     |> then(&(try_open(space, &1)))
     |> update_status()
@@ -152,7 +155,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def handle_event(%__MODULE__{} = game, {:flag, space}) do
+  def handle_event(%__MODULE__{} = game, _, {:flag, space}) do
     {n, g} = toggle_flag(space, game)
     |> take_notifications()
 
@@ -230,12 +233,11 @@ defmodule WebGames.Minesweeper.GameState do
 
   # We win if all cells that don't have mines are open
   defp has_won?(game) do
-    Enum.count(game.grid, fn {_, cell} ->
+    not Enum.any?(game.grid, fn {_, cell} ->
       !cell.has_mine? && !cell.opened?
-    end) == 0
+    end)
   end
 
-  @impl true
   def take_notifications(game) do
     {Notification.collate_notifications(game.notifications), struct(game, notifications: [])}
   end
@@ -245,17 +247,30 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  def add_player(%__MODULE__{player: nil} = game, player) do
-    {n, g} = %__MODULE__{game | player: player}
+  def join_game(%__MODULE__{player: nil} = game, player) do
+    {n, g} = %__MODULE__{game | player: Player.get_id(player)}
     |> add_notification(:all, {:added, player})
     |> take_notifications()
 
-    {:ok, n, g}
+    topic_refs = [
+      :all,
+      {:player, Player.get_id(player)}
+    ]
+
+    {:ok, {topic_refs, %{}}, n, g}
   end
 
   @impl true
-  def add_player(%__MODULE__{player: player} = game, player) do
-    IO.inspect("CANNOT ADD PLAYER #{inspect(player)}")
-    {:ok, [], game}
+  def join_game(%__MODULE__{player: player} = game, new_player) do
+    if new_player == player do
+      topic_refs = [
+        :all,
+        {:player, Player.get_id(player)}
+      ]
+
+      {:ok, {topic_refs, %{}}, [], game}
+    else
+      {:error, :game_full}
+    end
   end
 end
