@@ -20,6 +20,7 @@ defmodule WebGamesWeb.Router do
     get "/", PageController, :home
     get "/select-game", SelectGameController, :select_game
     post "/new-game/minesweeper", NewGameController, :start_minesweeper
+    post "/new-game/lightcycles", NewGameController, :start_lightcycles
     get "/play/:game_id", PlayController, :connect_to_game
   end
 

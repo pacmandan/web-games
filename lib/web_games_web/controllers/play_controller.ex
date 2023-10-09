@@ -4,19 +4,32 @@ defmodule WebGamesWeb.PlayController do
   alias GamePlatform.Game
   alias GamePlatform.Player
 
+  alias WebGames.Minesweeper.GameState, as: MinesweeperState
+  alias WebGames.LightCycles.GameState, as: LightCyclesState
+
+  alias WebGamesWeb.Minesweeper.Play, as: MinesweeperPlay
+  alias WebGamesWeb.LightCycles.Play, as: LightCyclesPlay
+
   import Phoenix.LiveView.Controller
+
+  @game_controllers %{
+    MinesweeperState => MinesweeperPlay,
+    LightCyclesState => LightCyclesPlay,
+  }
 
   def connect_to_game(conn, %{"game_id" => game_id}) do
     if Game.game_exists?(game_id) do
       {player_id, conn} = get_player_id(conn)
       {:ok, topics, opts} = Game.join_game(player_id, game_id)
 
+      {:ok, state_module} = Game.get_game_type(game_id)
+      render_module = @game_controllers[state_module]
+
       conn
       |> put_session("game_id", game_id)
       |> put_session("player_opts", opts)
       |> put_session("topics", topics)
-      # TODO: Make which game to render generic somehow
-      |> live_render(WebGamesWeb.Minesweeper.Play)
+      |> live_render(render_module)
     else
       conn
       |> clear_session()

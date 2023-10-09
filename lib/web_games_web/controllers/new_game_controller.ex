@@ -34,6 +34,17 @@ defmodule WebGamesWeb.NewGameController do
     |> redirect(to: "/play/#{game_id}")
   end
 
+  def start_lightcycles(conn, _params) do
+    player_id = get_player_id(conn)
+
+    {game_id, _} = WebGames.start_lightcycles(player_id, %{width: 100, height: 100})
+
+    conn
+    |> put_session("game_id", game_id)
+    |> put_session("player_id", player_id)
+    |> redirect(to: "/play/#{game_id}")
+  end
+
   defp get_player_id(conn) do
     case get_session(conn, "player_id") do
       # TODO: Generate ID based on something unique to the user

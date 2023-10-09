@@ -13,12 +13,10 @@ defmodule GamePlatform.Notification do
   def build(to), do: build(to, [])
 
   @spec build(term(), term()) :: term()
-  def build(to, msgs) when is_list(msgs), do: %__MODULE__{to: to, msgs: msgs}
-  def build(to, msg), do: %__MODULE__{to: to, msgs: [msg]}
+  def build(to, msgs), do: %__MODULE__{to: to, msgs: List.wrap(msgs)}
 
   @spec add_msg(t(), term()) :: t()
-  def add_msg(%__MODULE__{msgs: msgs} = n, new_msgs) when is_list(new_msgs), do: %__MODULE__{n | msgs: new_msgs ++ msgs}
-  def add_msg(%__MODULE__{msgs: msgs} = n, new_msg), do: %__MODULE__{n | msgs: [new_msg | msgs]}
+  def add_msg(%__MODULE__{msgs: msgs} = n, new_msgs), do: %__MODULE__{n | msgs: List.wrap(new_msgs) ++ msgs}
 
   @spec collate_notifications(list(t())) :: list(t())
   def collate_notifications(notifications) do

@@ -27,10 +27,32 @@ let Hooks = {}
 Hooks.MinesweeperFlag = {
   mounted() {
     this.el.addEventListener("contextmenu", e => {
-      console.log("HANDLING oncontextmenu!!!")
       e.preventDefault()
       this.pushEvent("flag", {x: this.el.getAttribute("phx-value-x"), y: this.el.getAttribute("phx-value-y")}, (reply, ref) => {})
       return false;
+    })
+  }
+}
+
+Hooks.LightCyclesDraw = {
+  mounted() {
+    this.handleEvent("draw", ({players}) => {
+      console.log("IN EVENT LISTENER!")
+      console.log(players)
+      let ctx = this.el.getContext("2d")
+      ctx.clearRect(0, 0, this.el.width, this.el.height)
+      ctx.lineWidth = 5;
+
+      for(const [id, player] of Object.entries(players)) {
+        ctx.strokeStyle = player.color
+        ctx.beginPath();
+        start = player.points.shift();
+        ctx.moveTo(...start)
+        player.points.forEach((point) => {
+          ctx.lineTo(...point)
+        })
+        ctx.stroke();
+      }
     })
   }
 }

@@ -71,6 +71,11 @@ defmodule GamePlatform.GameServer do
   end
 
   @impl true
+  def handle_call(:game_type, _from, state) do
+    {:reply, {:ok, state.game_module.game_type(state.game_state)}, state}
+  end
+
+  @impl true
   def handle_cast({:leave_game, player_id}, state) do
     do_remove_player(player_id, state)
   end
@@ -114,7 +119,9 @@ defmodule GamePlatform.GameServer do
   def handle_info(:game_timeout, state) do
     # TODO: Log game timeout
     # TODO: Send final notifications (get from game state)
-    {:stop, :normal, state}
+    {:ok, notifications, new_state} = state.game_module.end_game(state.game_state)
+    send_notifications(notifications, new_state)
+    {:stop, :normal, new_state}
   end
 
   @impl true
@@ -143,7 +150,6 @@ defmodule GamePlatform.GameServer do
   # Internal events, triggered via Process.send_after(self()) within the Game.schedule_event().
   @impl true
   def handle_info({:game_event, event}, state) do
-    # TODO: When adding "from", use :game
     case state.game_module.handle_event(state.game_state, :game, event) do
       {:ok, notifications, new_game_state} ->
         # Internal game events do not reset the timer.
@@ -191,6 +197,7 @@ defmodule GamePlatform.GameServer do
     end
   end
 
+  defp send_notifications([], _), do: :ok
   defp send_notifications(notifications, state) do
     Notification.send_all(notifications, state.game_id, state.server_config.pubsub)
   end

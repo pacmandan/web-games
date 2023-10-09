@@ -4,4 +4,11 @@
     <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()}/>
     <button>NEW MINESWEEPER GAME</button>
   </form>
+  <br/>
+  <br/>
+  <br/>
+  <form action="/new-game/lightcycles" method="post">
+    <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()}/>
+    <button>NEW LIGHTCYCLES GAME</button>
+  </form>
 </div>

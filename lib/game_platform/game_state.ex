@@ -65,6 +65,10 @@ defmodule GamePlatform.GameState do
   @callback handle_event(game_state(), from :: player_id() | :game, event :: term()) ::
   {:ok, notifications(), game_state()}
 
+  @callback end_game(game_state()) :: {:ok, notifications(), game_state()}
+
+  @callback game_type(game_state()) :: module()
+
   defmacro __using__(_opts) do
     quote do
       @behaviour GamePlatform.GameState
@@ -74,6 +78,8 @@ defmodule GamePlatform.GameState do
       def player_connected(_, state), do: {:ok, [], state}
       def player_disconnected(state, _), do: {:ok, [], state}
       def handle_event(_, _, state), do: {:ok, [], state}
+      def end_game(state), do: {:ok, [], state}
+      def game_type(_), do: __MODULE__
       defoverridable GamePlatform.GameState
     end
   end
