@@ -37,8 +37,6 @@ Hooks.MinesweeperFlag = {
 Hooks.LightCyclesDraw = {
   mounted() {
     this.handleEvent("draw", ({players}) => {
-      console.log("IN EVENT LISTENER!")
-      console.log(players)
       let ctx = this.el.getContext("2d")
       ctx.clearRect(0, 0, this.el.width, this.el.height)
       ctx.lineWidth = 5;

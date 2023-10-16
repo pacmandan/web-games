@@ -9,17 +9,36 @@ defmodule WebGamesWeb.LightCycles.Play do
     :display,
   ]
 
-  def mount(_params, %{"game_id" => game_id, "player_id" => player_id, "topics" => topics, "player_opts" => _player_opts}, socket) do
+  def mount(_params, %{"game_id" => game_id, "player_id" => player_id, "topics" => topics}, socket) do
     if Game.game_exists?(game_id) do
-      if connected?(socket) do
+      socket = if connected?(socket) do
         Enum.each(topics, fn topic -> Phoenix.PubSub.subscribe(WebGames.PubSub, topic) end)
         Game.player_connected(player_id, game_id, self())
+
+        assign(socket, :game_monitor, Game.monitor(game_id))
+      else
+        socket
       end
 
-      {:ok, assign(socket, %{game_state: nil, player_id: player_id, game_id: game_id, events: [], display: ""})}
+      {:ok, assign(socket, %{game_state: nil, player_id: player_id, game_id: game_id, display: ""})}
     else
       {:ok, redirect(socket, to: "/select-game")}
     end
+  end
+
+  def handle_info(:try_reconnect, socket) do
+    # Check if the game is up.
+    # If it's not, ":try_reconnect" again after an exponential backoff.
+    # (After X number of tries, give up and redirect out.)
+    # If the game is found, call join_game(), re-subscribe to topics (unsubscribe + subscribe), and call player_connected()
+    {:noreply, socket}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _object, _reason}, socket) do
+    # Display "Game has crashed" message.
+    # Set internals to pre :sync state
+    # Send self a ":try_reconnect" message after a bit.
+    {:noreply, socket}
   end
 
   def handle_info({:game_event, _game_id, msgs}, socket) do
@@ -27,7 +46,6 @@ defmodule WebGamesWeb.LightCycles.Play do
       # IO.inspect("MSG: #{inspect(msg)}")
       process_event(msg, acc)
     end)
-    # |> Map.put(:events, [msgs |> inspect() | socket.assigns[:events]])
 
     socket = socket
     |> assign(new_assigns)
@@ -36,7 +54,12 @@ defmodule WebGamesWeb.LightCycles.Play do
     {:noreply, socket}
   end
 
+  def handle_info({:display_event, _game_id, :clear_display}, socket) do
+    {:noreply, assign(socket, %{display: ""})}
+  end
+
   defp process_event(:start_game, assigns) do
+    Process.send_after(self(), {:display_event, assigns.game_id, :clear_display}, :timer.seconds(2))
     %{assigns | display: "GO!"}
   end
 
@@ -80,13 +103,13 @@ defmodule WebGamesWeb.LightCycles.Play do
     # IO.inspect("PLAYER")
     # IO.inspect(player)
     case key do
-      "w" ->
+      "ArrowUp" ->
         Game.send_event({:turn, :north, player[:location]}, socket.assigns[:player_id], socket.assigns[:game_id])
-      "s" ->
+      "ArrowDown" ->
         Game.send_event({:turn, :south, player[:location]}, socket.assigns[:player_id], socket.assigns[:game_id])
-      "a" ->
+      "ArrowLeft" ->
         Game.send_event({:turn, :west, player[:location]}, socket.assigns[:player_id], socket.assigns[:game_id])
-      "d" ->
+      "ArrowRight" ->
         Game.send_event({:turn, :east, player[:location]}, socket.assigns[:player_id], socket.assigns[:game_id])
       _ -> :ok
     end
