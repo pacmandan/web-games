@@ -11,7 +11,6 @@ defmodule GamePlatform.GameState do
 
   @type pubsub_topic :: term()
   @type player_opts :: term()
-  @type player_join_spec :: {list(pubsub_topic()), term()}
 
   @doc """
   Initializes the game state based on provided config.
@@ -33,7 +32,7 @@ defmodule GamePlatform.GameState do
   If trying to add a player that already exists, return successfully as if they were just added.
   """
   @callback join_game(game_state(), player_id()) ::
-    {:ok, player_join_spec(), notifications(), game_state()}
+    {:ok, list(pubsub_topic()), notifications(), game_state()}
 
   @doc """
   Removes a player from the state. Typically called by the server whenever a player has disconnected and timed out.
@@ -67,8 +66,6 @@ defmodule GamePlatform.GameState do
 
   @callback end_game(game_state()) :: {:ok, notifications(), game_state()}
 
-  @callback game_type(game_state()) :: module()
-
   defmacro __using__(_opts) do
     quote do
       @behaviour GamePlatform.GameState
@@ -79,7 +76,6 @@ defmodule GamePlatform.GameState do
       def player_disconnected(state, _), do: {:ok, [], state}
       def handle_event(_, _, state), do: {:ok, [], state}
       def end_game(state), do: {:ok, [], state}
-      def game_type(_), do: __MODULE__
       defoverridable GamePlatform.GameState
     end
   end

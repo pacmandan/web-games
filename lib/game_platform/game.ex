@@ -19,6 +19,11 @@ defmodule GamePlatform.Game do
     GenServer.call(GameServer.via_tuple(game_id), :game_type)
   end
 
+  def monitor(game_id) do
+    {pid, _} = Registry.lookup(@registry, game_id) |> hd()
+    Process.monitor(pid)
+  end
+
   def send_event_after(event, game_id, time) do
     case Registry.lookup(@registry, game_id) do
       [] -> {:error, :not_found}

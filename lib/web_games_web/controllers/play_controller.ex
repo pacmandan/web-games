@@ -20,14 +20,13 @@ defmodule WebGamesWeb.PlayController do
   def connect_to_game(conn, %{"game_id" => game_id}) do
     if Game.game_exists?(game_id) do
       {player_id, conn} = get_player_id(conn)
-      {:ok, topics, opts} = Game.join_game(player_id, game_id)
+      {:ok, topics} = Game.join_game(player_id, game_id)
 
       {:ok, state_module} = Game.get_game_type(game_id)
       render_module = @game_controllers[state_module]
 
       conn
       |> put_session("game_id", game_id)
-      |> put_session("player_opts", opts)
       |> put_session("topics", topics)
       |> live_render(render_module)
     else

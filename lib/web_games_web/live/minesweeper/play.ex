@@ -16,11 +16,17 @@ defmodule WebGamesWeb.Minesweeper.Play do
   ]
 
   @impl true
-  def mount(_params, %{"game_id" => game_id, "player_id" => player_id, "topics" => topics, "player_opts" => _player_opts}, socket) do
+  def mount(_params, %{"game_id" => game_id, "player_id" => player_id, "topics" => topics}, socket) do
     if Game.game_exists?(game_id) do
       if connected?(socket) do
         Enum.each(topics, fn topic -> Phoenix.PubSub.subscribe(WebGames.PubSub, topic) end)
-        Game.player_connected(player_id, game_id, self())
+        # TODO: Set timer, if we don't get a sync before it runs out, try again.
+        # Also set a "back-off" for attempts.
+        # Maybe better to do a "receive" loop directly instead of waiting on handle_info?
+        # That way we don't have to mess with Process.send_after(), and the whole thing can
+        # be self-contained.
+        # Game.player_connected(player_id, game_id, self())
+        wait_for_sync(player_id, game_id, socket)
       end
       {:ok, assign(socket, init_assigns(game_id, player_id))}
     else
@@ -32,6 +38,21 @@ defmodule WebGamesWeb.Minesweeper.Play do
   @impl true
   def mount(_params, _session, socket) do
     {:ok, redirect(socket, to: "/select-game")}
+  end
+
+  defp wait_for_sync(player_id, game_id, socket, attempts \\ 5)
+  defp wait_for_sync(_player_id, _game_id, _socket, 0) do
+    {:error, :cannot_connect_to_game}
+  end
+  defp wait_for_sync(player_id, game_id, socket, attempts) do
+    Game.player_connected(player_id, game_id, self())
+    receive do
+      # TODO: Maybe make "sync" messages into a different structure?
+      {:game_event, _, [{:sync, _data}]} ->
+        :ok
+    after
+      30_000 -> wait_for_sync(player_id, game_id, socket, attempts - 1)
+    end
   end
 
   def init_assigns(game_id, player_id) do

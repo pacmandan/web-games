@@ -265,7 +265,7 @@ defmodule WebGames.Minesweeper.GameState do
       {:player, player_id}
     ]
 
-    {:ok, {topic_refs, %{}}, n, g}
+    {:ok, topic_refs, n, g}
   end
 
   @impl true
@@ -275,7 +275,7 @@ defmodule WebGames.Minesweeper.GameState do
       {:player, player_id}
     ]
 
-    {:ok, {topic_refs, %{}}, [], game}
+    {:ok, topic_refs, [], game}
   end
 
   @impl true

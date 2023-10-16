@@ -1,15 +1,4 @@
 defmodule WebGames.LightCycles.GameState do
-  @moduledoc """
-
-  connected <- :sync, state()
-  {:player_config, opts} -> {:player_config_change, player_opts, player_config}
-  :player_ready -> {:player_ready, player_id}
-  :start_game -> :start_countdown
-  {:countdown, n} -> {:countdown, n}
-  {:countdown, 0} -> :start_game
-  {:turn, direction} -> []
-  :tick -> {:tick, state()}
-  """
   alias GamePlatform.Notification
   alias GamePlatform.GameServer
 
@@ -82,6 +71,7 @@ defmodule WebGames.LightCycles.GameState do
       width: config.width,
     }
 
+    # TODO: Remove to allow multiplayer!
     GameServer.send_event_after(:start_game, 1500)
 
     {:ok, state}
@@ -92,9 +82,7 @@ defmodule WebGames.LightCycles.GameState do
     cond do
       existing_player?(game_state, player_id) ->
         # This is an existing player joining or re-joining.
-        # Grab their config and go.
-        opts = game_state.players[player_id].config
-        {:ok, {player_topics(player_id), opts}, [], game_state}
+        {:ok, player_topics(player_id), [], game_state}
 
       game_state.current_state == :init && game_state.players |> Kernel.map_size() < @max_players ->
         # A new player is attempting to join,
@@ -107,7 +95,7 @@ defmodule WebGames.LightCycles.GameState do
 
         n = Notification.build(:all, {:player_added, new_state.players[player_id].config})
 
-        {:ok, {player_topics(player_id), %{}}, [n], new_state}
+        {:ok, player_topics(player_id), [n], new_state}
 
       true ->
         {:error, :cannot_join}
