@@ -50,7 +50,7 @@ defmodule WebGames.Minesweeper.GameState do
 
   @spec all_coords(integer(), integer()) :: list(coord_t())
   def all_coords(width, height) do
-    for x <- 0..(width - 1), y <- 0..(height - 1), do: {x, y}
+    for x <- 1..width, y <- 1..height, do: {x, y}
   end
 
   defp create_blank_grid(config) do

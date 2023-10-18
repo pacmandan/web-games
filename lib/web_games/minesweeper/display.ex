@@ -5,7 +5,7 @@ defmodule WebGames.Minesweeper.Display do
     |> Enum.sort_by(fn {x, y} -> {y, x} end)
     |> Enum.map(fn space -> cell_to_string(game.grid[space], game.status, cheat?) end)
     |> Enum.chunk_every(game.w)
-    |> Enum.zip(0..(game.h - 1))
+    |> Enum.zip(1..(game.h))
     |> Enum.map(fn {row, index} ->
       "#{List.duplicate(" ", num_width_digits - num_digits(index)) |> Enum.join()}#{index}|#{Enum.join(row)}"
     end)
@@ -20,13 +20,13 @@ defmodule WebGames.Minesweeper.Display do
 
     leftpad = List.duplicate(" ", num_width_digits) |> Enum.join()
     if game.h > 100 do
-      IO.puts("#{leftpad}|#{0..(game.w - 1) |> Enum.map_join("", &(nth_digit(&1, 3)))}")
+      IO.puts("#{leftpad}|#{1..(game.w) |> Enum.map_join("", &(nth_digit(&1, 3)))}")
     end
     if game.h > 10 do
-      IO.puts("#{leftpad}|#{0..(game.w - 1) |> Enum.map_join("", &(nth_digit(&1, 2)))}")
+      IO.puts("#{leftpad}|#{1..(game.w) |> Enum.map_join("", &(nth_digit(&1, 2)))}")
     end
-    IO.puts("#{leftpad}|#{0..(game.w - 1) |> Enum.map_join("", &(nth_digit(&1, 1)))}")
-    IO.puts("--#{for _ <- 0..(game.w + num_width_digits - 1), do: "-"}")
+    IO.puts("#{leftpad}|#{1..(game.w) |> Enum.map_join("", &(nth_digit(&1, 1)))}")
+    IO.puts("--#{for _ <- 1..(game.w + num_width_digits), do: "-"}")
     Enum.each(display_rows, &IO.puts/1)
 
     :ok

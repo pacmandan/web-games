@@ -3,6 +3,8 @@ defmodule WebGamesWeb.NewGameController do
   alias WebGames.Minesweeper
   use WebGamesWeb, :controller
 
+  # TODO: Move this controller into GamePlatform?
+
   def start_minesweeper(conn, %{"width" => width, "height" => height, "num_mines" => num_mines, "type" => "custom"}) do
     player_id = get_player_id(conn)
 

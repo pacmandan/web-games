@@ -18,6 +18,7 @@ defmodule WebGamesWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    live "/test", Test
     get "/select-game", SelectGameController, :select_game
     post "/new-game/minesweeper", NewGameController, :start_minesweeper
     post "/new-game/lightcycles", NewGameController, :start_lightcycles

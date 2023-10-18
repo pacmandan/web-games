@@ -5,15 +5,25 @@ defmodule GamePlatform.GameServer do
   alias GamePlatform.Notification
   use GenServer, restart: :transient
 
-  # TODO: Make this configurable, preferably via config.ex
-  @registry :game_registry
-
   @default_server_config %{
     game_timeout_length: :timer.minutes(30),
     player_disconnect_timeout_length: :timer.minutes(2),
   }
 
   @type game_spec_t :: {module(), any()}
+
+  # TODO: Should this be a struct?
+  @type state_t :: %{
+    game_id: String.t(),
+    game_module: module(),
+    game_config: map(),
+    game_state: term(),
+    server_config: map(),
+    timeout_ref: reference(),
+    connected_player_ids: MapSet.t(String.t()),
+    connected_player_monitors: %{reference() => String.t()},
+    player_timeout_refs: %{String.t() => reference()},
+  }
 
   @doc """
   To start a game, it needs the following:
@@ -36,7 +46,7 @@ defmodule GamePlatform.GameServer do
   """
   @spec via_tuple(String.t()) :: {:via, Registry, {atom(), String.t()}}
   def via_tuple(id) do
-    {:via, Registry, {@registry, id}}
+    {:via, Registry, {GamePlatform.GameRegistry.registry_name(), id}}
   end
 
   defp valid_server_config(config) do
@@ -58,7 +68,7 @@ defmodule GamePlatform.GameServer do
       server_config: server_config,
       timeout_ref: nil,
       # TODO: Look more into Phoenix.Presence and Phoenix.Tracker to see if it could replace or augment this.
-      connected_players: MapSet.new(),
+      connected_player_ids: MapSet.new(),
       connected_player_monitors: %{},
       player_timeout_refs: %{},
     }
@@ -68,6 +78,7 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_continue(:init_game, state) do
+    # TODO: Handle error in game state init
     # Initialize the game state using the provided "game_config".
     {:ok, game_state} = state.game_module.init(state.game_config)
 
@@ -111,7 +122,7 @@ defmodule GamePlatform.GameServer do
   @impl true
   def handle_cast({:game_event, from, event}, state) do
     # Only handle events from connected players.
-    with true <- MapSet.member?(state.connected_players, from),
+    with true <- MapSet.member?(state.connected_player_ids, from),
       {:ok, notifications, new_game_state} <- state.game_module.handle_event(state.game_state, from, event)
     do
       new_state = state
@@ -140,7 +151,7 @@ defmodule GamePlatform.GameServer do
         # Monitor connected player to see if/when they disconnect
         new_state = state
         |> Map.replace(:connected_player_monitors, Map.put(state.connected_player_monitors, Process.monitor(pid), player_id))
-        |> Map.replace(:connected_players, MapSet.put(state.connected_players, player_id))
+        |> Map.replace(:connected_player_ids, MapSet.put(state.connected_player_ids, player_id))
         |> Map.replace(:game_state, new_game_state)
 
         send_notifications(notifications, new_state)
@@ -166,12 +177,12 @@ defmodule GamePlatform.GameServer do
     # Oh no! A player has disconnected!
     # Pop their monitor from connected players.
     {player_id, connected_player_monitors} = Map.pop(state.connected_player_monitors, ref)
-    connected_players = MapSet.delete(state.connected_players, player_id)
+    connected_player_ids = MapSet.delete(state.connected_player_ids, player_id)
 
     # Update the monitors and connected players maps before we tell the game state.
     state = state
     |> Map.replace(:connected_player_monitors, connected_player_monitors)
-    |> Map.replace(:connected_players, connected_players)
+    |> Map.replace(:connected_player_ids, connected_player_ids)
     |> schedule_player_timeout(player_id)
 
     if player_id |> is_nil() do
@@ -229,14 +240,14 @@ defmodule GamePlatform.GameServer do
     # Pop the player from relevant lists
     monitor_ref = Enum.find(state.connected_player_monitors, fn {_, id} -> player_id == id end)
     connected_player_monitors = Map.drop(state.connected_player_monitors, [monitor_ref])
-    connected_players = MapSet.delete(state.connected_players, player_id)
+    connected_player_ids = MapSet.delete(state.connected_player_ids, player_id)
 
     # Stop monitoring if they're a connected player.
     unless monitor_ref |> is_nil(), do: Process.demonitor(monitor_ref)
 
     new_state = state
     |> Map.replace(:connected_player_monitors, connected_player_monitors)
-    |> Map.replace(:connected_players, connected_players)
+    |> Map.replace(:connected_player_ids, connected_player_ids)
     |> cancel_player_timeout(player_id)
 
     # Tell the game state that this player is leaving.

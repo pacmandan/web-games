@@ -13,6 +13,9 @@ defmodule GamePlatform.GameSupervisor do
   end
 
   defp generate_game_id() do
+    # TODO: Check if this ID is in use.
+    # If it is, roll again, but with 1 more character.
+    # Repeat until we get an unused ID, or reach 30 characters. (In which case, return an error because WTF.)
     for _ <- 1..4, into: "", do: <<Enum.random(?A..?Z)>>
   end
 
