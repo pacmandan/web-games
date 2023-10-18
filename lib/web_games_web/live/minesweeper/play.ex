@@ -25,10 +25,10 @@ defmodule WebGamesWeb.Minesweeper.Play do
         # Maybe better to do a "receive" loop directly instead of waiting on handle_info?
         # That way we don't have to mess with Process.send_after(), and the whole thing can
         # be self-contained.
-        # Game.player_connected(player_id, game_id, self())
-        wait_for_sync(player_id, game_id, socket)
+
+        Game.player_connected(player_id, game_id, self())
       end
-      {:ok, assign(socket, init_assigns(game_id, player_id))}
+      {:ok, assign(socket, init_assigns(game_id, player_id)), temporary_assigns: [display_grid: %{}]}
     else
       {:ok, redirect(socket, to: "/select-game")}
     end
@@ -40,20 +40,20 @@ defmodule WebGamesWeb.Minesweeper.Play do
     {:ok, redirect(socket, to: "/select-game")}
   end
 
-  defp wait_for_sync(player_id, game_id, socket, attempts \\ 5)
-  defp wait_for_sync(_player_id, _game_id, _socket, 0) do
-    {:error, :cannot_connect_to_game}
-  end
-  defp wait_for_sync(player_id, game_id, socket, attempts) do
-    Game.player_connected(player_id, game_id, self())
-    receive do
-      # TODO: Maybe make "sync" messages into a different structure?
-      {:game_event, _, [{:sync, _data}]} ->
-        :ok
-    after
-      30_000 -> wait_for_sync(player_id, game_id, socket, attempts - 1)
-    end
-  end
+  # defp wait_for_sync(player_id, game_id, socket, attempts \\ 5)
+  # defp wait_for_sync(_player_id, _game_id, _socket, 0) do
+  #   {:error, :cannot_connect_to_game}
+  # end
+  # defp wait_for_sync(player_id, game_id, socket, attempts) do
+  #   Game.player_connected(player_id, game_id, self())
+  #   receive do
+  #     # TODO: Maybe make "sync" messages into a different structure?
+  #     {:game_event, _, [{:sync, _data}]} ->
+  #       :ok
+  #   after
+  #     30_000 -> wait_for_sync(player_id, game_id, socket, attempts - 1)
+  #   end
+  # end
 
   def init_assigns(game_id, player_id) do
     %{
@@ -61,7 +61,7 @@ defmodule WebGamesWeb.Minesweeper.Play do
       player_id: player_id,
       events: [],
       grid: nil,
-      display_grid: nil,
+      display_grid: %{},
       status: :play,
       clicks_enabled?: true,
     }
@@ -88,11 +88,6 @@ defmodule WebGamesWeb.Minesweeper.Play do
     new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), fn msg, acc ->
       process_event(msg, acc)
     end)
-    |> Map.put(:events, [msgs |> inspect() | socket.assigns[:events]])
-
-    display_grid = render_grid(new_assigns.grid, new_assigns)
-
-    new_assigns = Map.put(new_assigns, :display_grid, display_grid)
 
     {:noreply, assign(socket, new_assigns)}
   end
@@ -102,7 +97,9 @@ defmodule WebGamesWeb.Minesweeper.Play do
       {coord, %{grid[coord] | clicked?: clicked?}}
     end)
 
-    %{assigns | grid: new_grid}
+    assigns
+    |> Map.put(:grid, new_grid)
+    |> update_display(Map.keys(cells))
   end
 
   def process_event({:open, cells}, %{grid: grid} = assigns) do
@@ -110,7 +107,9 @@ defmodule WebGamesWeb.Minesweeper.Play do
       {coord, %{grid[coord] | value: value, opened?: true}}
     end)
 
-    %{assigns | grid: new_grid}
+    assigns
+    |> Map.put(:grid, new_grid)
+    |> update_display(Map.keys(cells))
   end
 
   def process_event({:flag, cells}, %{grid: grid} = assigns) do
@@ -118,7 +117,9 @@ defmodule WebGamesWeb.Minesweeper.Play do
       {coord, %{grid[coord] | flagged?: flagged?}}
     end)
 
-    %{assigns | grid: new_grid}
+    assigns
+    |> Map.put(:grid, new_grid)
+    |> update_display(Map.keys(cells))
   end
 
   def process_event({:game_over, :lose}, assigns) do
@@ -131,6 +132,7 @@ defmodule WebGamesWeb.Minesweeper.Play do
 
   def process_event({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status}}, assigns) do
     Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n, status: status})
+    |> then(fn new_assigns -> Map.put(new_assigns, :display_grid, render_grid(grid, new_assigns)) end)
   end
 
   def process_event({:show_mines, coord_list}, %{grid: grid} = assigns) do
@@ -138,7 +140,18 @@ defmodule WebGamesWeb.Minesweeper.Play do
       {coord, %{grid[coord] | has_mine?: true}}
     end)
 
-    %{assigns | grid: new_grid}
+    assigns
+    |> Map.put(:grid, new_grid)
+    |> update_display(coord_list)
+  end
+
+  def update_display(assigns, coords) do
+    Enum.map(coords, fn coord ->
+      {coord, render_cell(assigns.grid[coord], assigns)}
+    end)
+    |> Enum.into(%{})
+    |> then(fn new_display -> Map.merge(assigns.display_grid, new_display) end)
+    |> then(fn new_display -> Map.put(assigns, :display_grid, new_display) end)
   end
 
   def render_grid(grid, assigns) do

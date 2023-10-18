@@ -1,10 +1,13 @@
 <div>
   Game ID: <%= @game_id %><br/>
   Player ID: <%= @player_id %><br/>
-  <WebGamesWeb.MinesweeperComponents.grid grid={@display_grid} height={@height} width={@width} :if={!is_nil(@grid)} />
+  <div style={"display:grid; grid-template-columns:repeat(#{@width},32px); grid-template-rows:repeat(#{@height},32px);"} :if={!is_nil(@grid)} id="cell_grid" phx-update="append">
+    <%= for {{x,y}, cell} <- @display_grid do %>
+      <.live_component module={WebGamesWeb.Live.MinesweeperCell} id={"cell_#{x}_#{y}"} x={x} y={y} cell={cell}/>
+    <% end %>
+  </div>
   <br/>
   <%= @status %>
-  <br/>
-  EVENTS:<br/>
-  <%= @events %>
 </div>
+
+
