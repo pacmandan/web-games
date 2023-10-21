@@ -20,11 +20,6 @@ defmodule WebGamesWeb.Minesweeper.Play do
     if Game.game_exists?(game_id) do
       if connected?(socket) do
         Enum.each(topics, fn topic -> Phoenix.PubSub.subscribe(WebGames.PubSub, topic) end)
-        # TODO: Set timer, if we don't get a sync before it runs out, try again.
-        # Also set a "back-off" for attempts.
-        # Maybe better to do a "receive" loop directly instead of waiting on handle_info?
-        # That way we don't have to mess with Process.send_after(), and the whole thing can
-        # be self-contained.
 
         Game.player_connected(player_id, game_id, self())
       end
@@ -40,22 +35,7 @@ defmodule WebGamesWeb.Minesweeper.Play do
     {:ok, redirect(socket, to: "/select-game")}
   end
 
-  # defp wait_for_sync(player_id, game_id, socket, attempts \\ 5)
-  # defp wait_for_sync(_player_id, _game_id, _socket, 0) do
-  #   {:error, :cannot_connect_to_game}
-  # end
-  # defp wait_for_sync(player_id, game_id, socket, attempts) do
-  #   Game.player_connected(player_id, game_id, self())
-  #   receive do
-  #     # TODO: Maybe make "sync" messages into a different structure?
-  #     {:game_event, _, [{:sync, _data}]} ->
-  #       :ok
-  #   after
-  #     30_000 -> wait_for_sync(player_id, game_id, socket, attempts - 1)
-  #   end
-  # end
-
-  def init_assigns(game_id, player_id) do
+  defp init_assigns(game_id, player_id) do
     %{
       game_id: game_id,
       player_id: player_id,
@@ -99,7 +79,7 @@ defmodule WebGamesWeb.Minesweeper.Play do
 
     assigns
     |> Map.put(:grid, new_grid)
-    |> update_display(Map.keys(cells))
+    |> render_cells(Map.keys(cells))
   end
 
   def process_event({:open, cells}, %{grid: grid} = assigns) do
@@ -109,7 +89,7 @@ defmodule WebGamesWeb.Minesweeper.Play do
 
     assigns
     |> Map.put(:grid, new_grid)
-    |> update_display(Map.keys(cells))
+    |> render_cells(Map.keys(cells))
   end
 
   def process_event({:flag, cells}, %{grid: grid} = assigns) do
@@ -119,20 +99,26 @@ defmodule WebGamesWeb.Minesweeper.Play do
 
     assigns
     |> Map.put(:grid, new_grid)
-    |> update_display(Map.keys(cells))
+    |> render_cells(Map.keys(cells))
   end
 
   def process_event({:game_over, :lose}, assigns) do
-    %{assigns | status: :lose, clicks_enabled?: false}
+    assigns
+    |> Map.put(:status, :lose)
+    |> Map.put(:clicks_enabled?, false)
+    |> render_full_grid()
   end
 
   def process_event({:game_over, :win}, assigns) do
-    %{assigns | status: :win, clicks_enabled?: false}
+    assigns
+    |> Map.put(:status, :win)
+    |> Map.put(:clicks_enabled?, false)
+    |> render_full_grid()
   end
 
   def process_event({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status}}, assigns) do
     Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n, status: status})
-    |> then(fn new_assigns -> Map.put(new_assigns, :display_grid, render_grid(grid, new_assigns)) end)
+    |> render_full_grid()
   end
 
   def process_event({:show_mines, coord_list}, %{grid: grid} = assigns) do
@@ -142,10 +128,10 @@ defmodule WebGamesWeb.Minesweeper.Play do
 
     assigns
     |> Map.put(:grid, new_grid)
-    |> update_display(coord_list)
+    |> render_cells(coord_list)
   end
 
-  def update_display(assigns, coords) do
+  defp render_cells(assigns, coords) do
     Enum.map(coords, fn coord ->
       {coord, render_cell(assigns.grid[coord], assigns)}
     end)
@@ -154,14 +140,11 @@ defmodule WebGamesWeb.Minesweeper.Play do
     |> then(fn new_display -> Map.put(assigns, :display_grid, new_display) end)
   end
 
-  def render_grid(grid, assigns) do
-    Enum.map(grid, fn {coord, cell} ->
-      {coord, render_cell(cell, assigns)}
-    end)
-    |> Enum.into(%{})
+  defp render_full_grid(assigns) do
+    render_cells(assigns, Map.keys(assigns.grid))
   end
 
-  def render_cell(cell, assigns) do
+  defp render_cell(cell, assigns) do
     %{
       background_color: background_color(cell),
       text_color: text_color(cell),
@@ -171,28 +154,28 @@ defmodule WebGamesWeb.Minesweeper.Play do
     }
   end
 
-  def background_color(%{opened?: true, has_mine?: true}), do: "bg-red-400"
-  def background_color(%{opened?: true}), do: "bg-gray-300"
-  def background_color(_), do: "bg-gray-500"
+  defp background_color(%{opened?: true, has_mine?: true}), do: "bg-red-400"
+  defp background_color(%{opened?: true}), do: "bg-gray-300"
+  defp background_color(_), do: "bg-gray-500"
 
-  def text_color(%{has_mine?: true}), do: "text-black"
-  def text_color(%{value: value}) when value in [0, "0"], do: "text-black"
-  def text_color(%{value: value}) when value in [1, "1"], do: "text-blue-500"
-  def text_color(%{value: value}) when value in [2, "2"], do: "text-green-500"
-  def text_color(%{value: value}) when value in [3, "3"], do: "text-red-500"
-  def text_color(%{value: value}) when value in [4, "4"], do: "text-blue-800"
-  def text_color(%{value: value}) when value in [5, "5"], do: "text-amber-800"
-  def text_color(%{value: value}) when value in [6, "6"], do: "text-sky-500"
-  def text_color(%{value: value}) when value in [7, "7"], do: "text-black"
-  def text_color(%{value: value}) when value in [8, "8"], do: "text-gray-700"
-  def text_color(_), do: "text-black"
+  defp text_color(%{has_mine?: true}), do: "text-black"
+  defp text_color(%{value: value}) when value in [0, "0"], do: "text-black"
+  defp text_color(%{value: value}) when value in [1, "1"], do: "text-blue-500"
+  defp text_color(%{value: value}) when value in [2, "2"], do: "text-green-500"
+  defp text_color(%{value: value}) when value in [3, "3"], do: "text-red-500"
+  defp text_color(%{value: value}) when value in [4, "4"], do: "text-blue-800"
+  defp text_color(%{value: value}) when value in [5, "5"], do: "text-amber-800"
+  defp text_color(%{value: value}) when value in [6, "6"], do: "text-sky-500"
+  defp text_color(%{value: value}) when value in [7, "7"], do: "text-black"
+  defp text_color(%{value: value}) when value in [8, "8"], do: "text-gray-700"
+  defp text_color(_), do: "text-black"
 
-  def display_value(%{has_mine?: true}, :win), do: "+"
-  def display_value(%{has_mine?: true, flagged?: true}, _), do: "O"
-  def display_value(%{has_mine?: true}, _), do: "X"
-  def display_value(%{flagged?: true}, _), do: "F"
-  def display_value(%{value: 0}, _), do: nil
-  def display_value(%{value: "0"}, _), do: nil
-  def display_value(%{value: v}, _), do: v
-  def display_value(_, _), do: nil
+  defp display_value(%{has_mine?: true}, :win), do: "+"
+  defp display_value(%{has_mine?: true, flagged?: true}, _), do: "O"
+  defp display_value(%{has_mine?: true}, _), do: "X"
+  defp display_value(%{flagged?: true}, _), do: "F"
+  defp display_value(%{value: 0}, _), do: nil
+  defp display_value(%{value: "0"}, _), do: nil
+  defp display_value(%{value: v}, _), do: v
+  defp display_value(_, _), do: nil
 end
