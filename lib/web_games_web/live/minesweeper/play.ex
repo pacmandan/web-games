@@ -72,6 +72,14 @@ defmodule WebGamesWeb.Minesweeper.Play do
     {:noreply, assign(socket, new_assigns)}
   end
 
+  def handle_info({:sync, _game_id, msgs}, socket) do
+    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), fn msg, acc ->
+      process_event(msg, acc)
+    end)
+
+    {:noreply, assign(socket, new_assigns)}
+  end
+
   def process_event({:click, cells}, %{grid: grid} = assigns) do
     new_grid = Enum.into(cells, grid, fn {coord, clicked?} ->
       {coord, %{grid[coord] | clicked?: clicked?}}

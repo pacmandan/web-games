@@ -54,6 +54,19 @@ defmodule WebGamesWeb.LightCycles.Play do
     {:noreply, socket}
   end
 
+  def handle_info({:sync, _game_id, msgs}, socket) do
+    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), fn msg, acc ->
+      # IO.inspect("MSG: #{inspect(msg)}")
+      process_event(msg, acc)
+    end)
+
+    socket = socket
+    |> assign(new_assigns)
+    |> draw_grid()
+
+    {:noreply, socket}
+  end
+
   def handle_info({:display_event, _game_id, :clear_display}, socket) do
     {:noreply, assign(socket, %{display: ""})}
   end

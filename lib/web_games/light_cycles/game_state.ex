@@ -147,7 +147,7 @@ defmodule WebGames.LightCycles.GameState do
       _player_state ->
         n = [
           Notification.build(:all, {:player_connected, player_id}),
-          Notification.build({:player, player_id}, {:sync, display_state(game_state)})
+          Notification.build({:player, player_id}, {:sync, display_state(game_state)}, :sync)
         ]
 
         {:ok, n, game_state}

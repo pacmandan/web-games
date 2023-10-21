@@ -121,7 +121,7 @@ defmodule WebGames.Minesweeper.GameState do
       sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines, status: game.status}
 
       {n, g} = game
-      |> add_notification({:player, player_id}, {:sync, sync_data})
+      |> add_sync_notification({:player, player_id}, {:sync, sync_data})
       |> take_notifications()
 
       {:ok, n, g}
@@ -252,6 +252,10 @@ defmodule WebGames.Minesweeper.GameState do
 
   defp add_notification(game, to, msg) do
     %__MODULE__{game | notifications: [Notification.build(to, msg) | game.notifications]}
+  end
+
+  defp add_sync_notification(game, to, msg) do
+    %__MODULE__{game | notifications: [Notification.build(to, msg, :sync) | game.notifications]}
   end
 
   @impl true
