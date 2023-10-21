@@ -12,7 +12,6 @@ defmodule GamePlatform.GameServer do
 
   @type game_spec_t :: {module(), any()}
 
-  # TODO: Should this be a struct?
   @type state_t :: %{
     game_id: String.t(),
     game_module: module(),

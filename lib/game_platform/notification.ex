@@ -2,36 +2,34 @@ defmodule GamePlatform.Notification do
   defstruct [
     to: :all,
     msgs: [],
+    type: :game_event
   ]
 
   @type t :: %__MODULE__{
     to: any(),
     msgs: list(any()),
+    type: :game_event | :sync
   }
 
   @spec build(term()) :: t()
   def build(to), do: build(to, [])
 
-  @spec build(term(), term()) :: term()
-  def build(to, msgs), do: %__MODULE__{to: to, msgs: List.wrap(msgs)}
+  @spec build(term(), term(), atom()) :: term()
+  def build(to, msgs, type \\ :game_event), do: %__MODULE__{to: to, msgs: List.wrap(msgs), type: type}
 
   @spec add_msg(t(), term()) :: t()
   def add_msg(%__MODULE__{msgs: msgs} = n, new_msgs), do: %__MODULE__{n | msgs: List.wrap(new_msgs) ++ msgs}
 
   @spec collate_notifications(list(t())) :: list(t())
   def collate_notifications(notifications) do
-    # Go from a flat map of notifications...
-    # [%{to: a, msgs: [1]}, %{to: a, msgs: [2]}, %{to: b, msgs: [3]}]
-    # ...to a collated list of notifications
-    # [%{to: a, msgs: [1, 2]}, %{to: b, msgs: [3]}]
-
+    # Group notification messages by :to and :type.
     notifications
     |> Enum.reverse()
     |> Enum.reduce(%{}, fn n, acc ->
-      if acc[n.to] do
-        %{acc | n.to => add_msg(acc[n.to], n.msgs)}
+      if acc[{n.to, n.type}] do
+        %{acc | {n.to, n.type} => add_msg(acc[{n.to, n.type}], n.msgs)}
       else
-        Map.put(acc, n.to, n)
+        Map.put(acc, {n.to, n.type}, n)
       end
     end)
     |> Map.values()
@@ -41,9 +39,9 @@ defmodule GamePlatform.Notification do
     for n <- notifications, do: send_one(n, game_id, pubsub)
   end
 
-  def send_one(%__MODULE__{to: to, msgs: msgs}, game_id, pubsub) do
+  def send_one(%__MODULE__{to: to, msgs: msgs, type: type}, game_id, pubsub) do
     # TODO: Resend on failure?
-    Phoenix.PubSub.broadcast(pubsub, get_topic(to, game_id), {:game_event, game_id, msgs})
+    Phoenix.PubSub.broadcast(pubsub, get_topic(to, game_id), {type, game_id, msgs})
   end
 
   def get_topic(:all, game_id), do: "game:#{game_id}"
