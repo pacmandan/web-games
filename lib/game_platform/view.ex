@@ -35,112 +35,125 @@ defmodule GamePlatform.View do
     - ...what should we do here? Redirect out? Wait for messages on existing topics?
       Ping the server until we get a response, then join_game(), unsubscribe/subscribe topics, connected()?
       (Exponential back-off on pinging the server?)
-
-  Behaviors to implement:
-  mount()
-  - initialize socket state
-  - subscribe to topics
-  - monitor game process
-  - redirect on failure (make this configurable somehow?)
-
-  try_reconnect
-
-  handle game :DOWN
-
-  handle game events?
-  (Should "process event" be the thing to implement?)
-  (Is there a generic thing we can do per-event?)
-
-  I think I need to rename a few things.
-  Instead of "notification" or "event", should it just be "message"?
-
-
-  assigns:
-  player_id,
-  game_id,
-  topics,
-  player_state,
-
   """
 
-  @callback init_game_state(socket :: term()) :: socket :: term()
+  @callback init_game_state(socket :: term()) :: {:ok, socket :: term()}
+  @callback synchronize_state(socket :: term(), sync_msgs :: term()) :: socket :: term()
   @callback process_message(msg :: term(), socket :: term()) :: socket :: term()
   @callback pre_process_messages(msgs :: list(term()), socket :: term()) :: {msgs :: list(term()), socket :: term()}
   @callback post_game_event(socket :: term()) :: socket :: term()
-  @callback handle_game_crash(socket :: term()) :: socket :: term()
-
-
-  defstruct [
-    :game_id,
-    :player_id,
-    topics: [],
-    view_state: %{},
-    reconnect_timer: nil,
-    game_monitor: nil,
-  ]
+  @callback handle_game_crash(socket :: term(), reason :: atom()) :: socket :: term()
 
   import Phoenix.Component
   import Phoenix.LiveView
+
+  alias GamePlatform.Game
 
   defmacro __using__(_) do
     quote do
       # TODO: Make this configurable?
       use WebGamesWeb, :live_view
 
+      import GamePlatform.View, only: [send_event: 2]
+
       # @view_module opts[:module]
 
       @behaviour GamePlatform.View
 
+      # FIXME: This is too much inside of a __using__ macro.
+      # Find some way to reduce this but maintain the behavior.
+      # Maybe we don't use __using__ at all.
+
       def mount(_params, %{"game_id" => game_id, "player_id" => player_id, "topics" => topics}, socket) do
-        if Game.game_exists?(game_id) do
+        if GamePlatform.Game.game_exists?(game_id) do
           if connected?(socket) do
             GamePlatform.View.subscribe_to_pubsub(topics)
 
             socket
-            |> GamePlatform.View.try_connect()
             |> GamePlatform.View.store_ids_in_assigns(game_id, player_id, topics)
+            |> GamePlatform.View.connect_player()
+            |> GamePlatform.View.schedule_reconnect_attempt()
             |> GamePlatform.View.monitor_game()
             |> init_game_state()
           else
             {:ok, socket}
           end
         else
-          {:ok, redirect(socket, to: "/select-game")}
+          socket = socket
+          |> put_flash(:error, "Game with id #{game_id} does not exist")
+          |> redirect(socket, to: "/select-game")
+          {:ok, socket}
         end
       end
 
       def mount(_params, _session, socket) do
-        {:ok, redirect(socket, to: "/select-game")}
+        # Invalid session state, somehow. We don't need to continue, just redirect out.
+        socket = socket
+        |> put_flash(:error, "Invalid sessions state, cannot connect to game")
+        |> redirect(to: "/select-game")
+
+        {:ok, socket}
+      end
+
+      def handle_info({:try_reconnect, attempts}, socket) when attempts >= 30 do
+        socket = socket
+        |> put_flash(:error, "Could not reconnect to server")
+        |> redirect(to: "/select-game")
+
+        {:noreply, socket}
       end
 
       def handle_info({:try_reconnect, attempts}, socket) do
-        # Check if the game is up.
-        # If it's not, ":try_reconnect" again after an exponential backoff.
-        # (After X number of tries, give up and redirect out.)
-        # If the game is found, call join_game(), re-subscribe to topics (unsubscribe + subscribe), and call player_connected()
+        socket = if Game.is_game_alive?(socket.assigns.game_id) do
+          socket
+          |> GamePlatform.View.monitor_game(socket)
+          |> GamePlatform.View.connect_player()
+          |> GamePlatform.View.schedule_reconnect_attempt(attempts)
+        else
+          socket
+          |> put_flash(:error, "Game server has crashed")
+          |> assign(socket, :connection_state, :server_down)
+          |> GamePlatform.View.schedule_reconnect_attempt(attempts)
+        end
         {:noreply, socket}
       end
 
-      def handle_info({:DOWN, ref, :process, _object, _reason}, socket) do
-        # Display "Game has crashed" message.
-        # Set internals to pre :sync state
-        # Send self a ":try_reconnect" message after a bit.
+      def handle_info({:DOWN, ref, :process, _object, _reason}, socket) when socket.assigns.game_monitor == ref do
+        socket = socket
+        |> assign(socket, :connection_state, :server_down)
+        |> GamePlatform.View.schedule_reconnect_attempt(attempts)
+
         {:noreply, socket}
       end
 
-      def handle_info({:game_event, _game_id, msgs}, socket) do
-        # TODO: Handle "sync" message.
-        # This might need to be a separate handle_info, and be sent as a separate Notification entirely.
-        # Which means a major refactor of Notification...
+      def handle_info({:DOWN, _ref, :process, _object, _reason}, socket) do
+        # Unknown monitor somehow? Ignore it.
+        {:noreply, socket}
+      end
+
+      def handle_info({:game_event, _game_id, msgs}, socket) when socket.assigns.connection_state == :synced do
         with {msgs, socket} <- pre_process_messages(msg, socket),
           socket <- Enum.reduce(msgs, socket, &process_message/2),
-          socket <- post_game_event(msgs, socket)
+          socket <- post_game_event(socket)
         do
           {:noreply, socket}
         else
           _ ->
             {:noreply, socket}
         end
+      end
+
+      def handle_info({:game_event, _, _}, socket) do
+        # Ignore all messages until we've synced.
+        {:noreply, socket}
+      end
+
+      def handle_info({:sync, _game_id, msgs}, socket) do
+        socket = socket
+        |> GamePlatform.View.handle_sync()
+        |> synchronize_state(socket, msgs)
+
+        {:noreply, socket}
       end
 
       def pre_process_messages(msgs, socket), do: {msgs, socket}
@@ -150,8 +163,6 @@ defmodule GamePlatform.View do
       defoverridable Phoenix.LiveView
     end
   end
-
-  alias GamePlatform.Game
 
   def send_event(event, socket) do
     Game.send_event(event, socket.assigns.player_id, socket.assigns.game_id)
@@ -165,10 +176,14 @@ defmodule GamePlatform.View do
   end
 
   def unsubscribe_from_pubsub(topics) do
+    # Does this need to be a separate function?
     Enum.each(topics, fn topic -> Phoenix.PubSub.unsubscribe(WebGames.PubSub, topic) end)
   end
 
   def monitor_game(socket) when not (socket.assigns.game_id |> is_nil()) do
+    unless socket.assigns.game_monitor |> is_nil() do
+      Process.demonitor(socket.assigns.game_monitor)
+    end
     assign(socket, :game_monitor, Game.monitor(socket.assigns.game_id))
   end
 
@@ -180,18 +195,15 @@ defmodule GamePlatform.View do
   end
 
   def cancel_reconnect_timer(socket) do
-    Process.cancel_timer(socket.assigns.reconnect_timer)
+    # Have to guard in case the game state sends :sync twice.
+    unless socket.assigns.reconnect_timer |> is_nil() do
+      Process.cancel_timer(socket.assigns.reconnect_timer)
+    end
+
     assign(socket, :reconnect_timer, nil)
   end
 
-  def try_connect(socket, attempt \\ 1)
-  def try_connect(socket, attempt) when attempt >= 5 do
-    # We've run out of attempts to reconnect to the game.
-    socket
-  end
-
-  def try_connect(socket, attempt) do
-    connect_player(socket)
+  def schedule_reconnect_attempt(socket, attempt \\ 1) do
     reconnect_timer = Process.send_after(self(), {:try_reconnect, attempt + 1}, :timer.seconds(attempt * 5))
     assign(socket, :reconnect_timer, reconnect_timer)
   end
@@ -205,14 +217,5 @@ defmodule GamePlatform.View do
     socket
     |> cancel_reconnect_timer()
     |> assign(:connection_state, :synced)
-  end
-
-  def pop_sync_msg(msgs) do
-    sync_msg = Enum.find(msgs, fn
-      {:sync, _} -> true
-      _ -> false
-    end)
-
-    {sync_msg, List.delete(msgs, sync_msg)}
   end
 end

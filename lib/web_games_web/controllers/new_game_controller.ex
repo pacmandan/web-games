@@ -28,7 +28,7 @@ defmodule WebGamesWeb.NewGameController do
       # TODO: Return 400 error instead of throwing
       _ -> throw "Invalid config type"
     end
-    {game_id, _} = WebGames.start_minesweeper(player_id, minesweeper_config)
+    {:ok, game_id, _} = WebGames.start_minesweeper(player_id, minesweeper_config)
 
     conn
     |> put_session("game_id", game_id)
@@ -39,7 +39,7 @@ defmodule WebGamesWeb.NewGameController do
   def start_lightcycles(conn, _params) do
     player_id = get_player_id(conn)
 
-    {game_id, _} = WebGames.start_lightcycles(player_id, %{width: 100, height: 100})
+    {:ok, game_id, _} = WebGames.start_lightcycles(player_id, %{width: 100, height: 100})
 
     conn
     |> put_session("game_id", game_id)

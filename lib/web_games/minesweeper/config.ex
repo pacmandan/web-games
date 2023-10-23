@@ -18,8 +18,11 @@ defmodule WebGames.Minesweeper.Config do
   def advanced(), do: %__MODULE__{width: 30, height: 16, num_mines: 99}
 
   def custom(width, height, num_mines) do
-    %__MODULE__{width: width, height: height, num_mines: num_mines}
+    %__MODULE__{width: coerce_to_integer(width), height: coerce_to_integer(height), num_mines: coerce_to_integer(num_mines)}
   end
+
+  defp coerce_to_integer(i) when i |> is_integer(), do: i
+  defp coerce_to_integer(s) when s |> is_binary(), do: String.to_integer(s)
 
   def valid?(%__MODULE__{} = c) do
     cond do

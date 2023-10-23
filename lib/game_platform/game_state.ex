@@ -64,9 +64,13 @@ defmodule GamePlatform.GameState do
   @callback handle_event(game_state(), from :: player_id() | :game, event :: term()) ::
   {:ok, notifications(), game_state()}
 
-  @callback end_game(game_state()) :: {:ok, notifications(), game_state()}
+  @doc """
+  The game server is about to shut down. Handle any last minute tasks before this happens.
+  """
+  @callback handle_game_shutdown(game_state()) :: {:ok, notifications(), game_state()}
 
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
+    %{view_module: view_module} = Enum.into(opts, %{})
     quote do
       @behaviour GamePlatform.GameState
 
@@ -75,7 +79,8 @@ defmodule GamePlatform.GameState do
       def player_connected(_, state), do: {:ok, [], state}
       def player_disconnected(state, _), do: {:ok, [], state}
       def handle_event(_, _, state), do: {:ok, [], state}
-      def end_game(state), do: {:ok, [], state}
+      def handle_game_shutdown(state), do: {:ok, [], state}
+      def game_view_module(), do: unquote(view_module)
       defoverridable GamePlatform.GameState
     end
   end

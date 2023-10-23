@@ -2,7 +2,7 @@ defmodule WebGames.LightCycles.GameState do
   alias GamePlatform.Notification
   alias GamePlatform.GameServer
 
-  use GamePlatform.GameState
+  use GamePlatform.GameState, view_module: WebGamesWeb.LightCycles.Play
 
   defstruct [
     free_spaces: MapSet.new(),
@@ -72,7 +72,7 @@ defmodule WebGames.LightCycles.GameState do
     }
 
     # TODO: Remove to allow multiplayer!
-    GameServer.send_event_after(:start_game, 1500)
+    GameServer.send_self_game_event(:start_game, 1500)
 
     {:ok, state}
   end
@@ -290,6 +290,7 @@ defmodule WebGames.LightCycles.GameState do
       #   |> add_notification(:all, {:winner, winner_id})
       0 ->
         # Tie
+        GameServer.send_self_server_event(:end_game, :timer.minutes(2))
         new_state
         |> add_notification(:all, :draw)
         |> pause_game()
@@ -330,7 +331,7 @@ defmodule WebGames.LightCycles.GameState do
   def handle_event(game_state, _, {:turn, _, _}), do: {:ok, [], game_state}
 
   @impl true
-  def end_game(game_state) do
+  def handle_game_shutdown(game_state) do
     n = Notification.build(:all, :end_game)
     {:ok, [n], pause_game(game_state)}
   end
@@ -351,10 +352,10 @@ defmodule WebGames.LightCycles.GameState do
   end
 
   defp schedule_countdown() do
-    GameServer.send_event_after({:countdown, 3}, :timer.seconds(1))
-    GameServer.send_event_after({:countdown, 2}, :timer.seconds(2))
-    GameServer.send_event_after({:countdown, 1}, :timer.seconds(3))
-    GameServer.send_event_after({:countdown, 0}, :timer.seconds(4))
+    GameServer.send_self_game_event({:countdown, 3}, :timer.seconds(1))
+    GameServer.send_self_game_event({:countdown, 2}, :timer.seconds(2))
+    GameServer.send_self_game_event({:countdown, 1}, :timer.seconds(3))
+    GameServer.send_self_game_event({:countdown, 0}, :timer.seconds(4))
   end
 
   defp turn_player(%{next_turn: nil} = player_state), do: player_state

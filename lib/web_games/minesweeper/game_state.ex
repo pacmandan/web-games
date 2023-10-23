@@ -10,7 +10,9 @@ defmodule WebGames.Minesweeper.GameState do
     start_time: nil,
   ]
 
-  use GamePlatform.GameState
+  @post_game_timeout :timer.minutes(2)
+
+  use GamePlatform.GameState, view_module: WebGamesWeb.Minesweeper.Play
 
   alias WebGames.Minesweeper.Config
   alias WebGames.Minesweeper.Display
@@ -204,9 +206,8 @@ defmodule WebGames.Minesweeper.GameState do
         get_adjacent_coords(coord)
         |> Enum.reduce({opened_cells, game}, fn adj_coord, {opened_cells, game} -> open(adj_coord, game, opened_cells) end)
       {:boom, cell} ->
-        game = %__MODULE__{game | status: :lose, grid: Map.replace(game.grid, coord, cell)}
-        |> add_notification(:all, {:show_mines, get_mine_locations(game.grid)})
-        |> add_notification(:all, {:game_over, :lose})
+        game = %__MODULE__{game | grid: Map.replace(game.grid, coord, cell)}
+        |> end_game(:lose)
 
         {[{coord, cell.value} | opened_cells], game}
     end
@@ -231,12 +232,21 @@ defmodule WebGames.Minesweeper.GameState do
   defp update_status(%__MODULE__{status: :win} = game), do: game
   defp update_status(%__MODULE__{status: _status} = game) do
     if has_won?(game) do
-      %__MODULE__{game | status: :win}
-      |> add_notification(:all, {:game_over, :win})
-      |> add_notification(:all, {:show_mines, get_mine_locations(game.grid)})
+      end_game(game, :win)
     else
       %__MODULE__{game | status: :play}
     end
+  end
+
+  defp end_game(game, status) do
+    # TODO: Maybe in the future, allow for this game to "reset" to play again?
+    # In which case, we'd need to keep track of this ref to cancel it on reset.
+    GamePlatform.GameServer.send_self_server_event(:end_game, @post_game_timeout)
+
+    game
+    |> Map.put(:status, status)
+    |> add_notification(:all, {:game_over, status})
+    |> add_notification(:all, {:show_mines, get_mine_locations(game.grid)})
   end
 
   # We win if all cells that don't have mines are open
