@@ -4,26 +4,15 @@ defmodule WebGamesWeb.PlayController do
   alias GamePlatform.Game
   alias GamePlatform.Player
 
-  alias WebGames.Minesweeper.GameState, as: MinesweeperState
-  alias WebGames.LightCycles.GameState, as: LightCyclesState
-
-  alias WebGamesWeb.Minesweeper.Play, as: MinesweeperPlay
-  alias WebGamesWeb.LightCycles.Play, as: LightCyclesPlay
-
   import Phoenix.LiveView.Controller
-
-  @game_controllers %{
-    MinesweeperState => MinesweeperPlay,
-    LightCyclesState => LightCyclesPlay,
-  }
 
   def connect_to_game(conn, %{"game_id" => game_id}) do
     if Game.game_exists?(game_id) do
       {player_id, conn} = get_player_id(conn)
       {:ok, topics} = Game.join_game(player_id, game_id)
 
-      {:ok, state_module} = Game.get_game_type(game_id)
-      render_module = @game_controllers[state_module]
+      # TODO: Maybe this is the key? Put this into the generic view?
+      {:ok, _state_module, render_module} = Game.get_game_type(game_id)
 
       conn
       |> put_session("game_id", game_id)
@@ -36,7 +25,7 @@ defmodule WebGamesWeb.PlayController do
     end
   end
 
-  def get_player_id(conn) do
+  defp get_player_id(conn) do
     player_id = get_session(conn, "player_id")
     if player_id |> is_nil() do
       player_id = Player.generate_id()

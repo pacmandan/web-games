@@ -97,7 +97,11 @@ defmodule GamePlatform.GameServer do
         send_notifications(notifications, state)
         topics = Enum.map(topic_refs, &(Notification.get_topic(&1, state.game_id)))
 
-        {:reply, {:ok, topics}, %{state | game_state: new_game_state}}
+        new_state = state
+        |> Map.put(:game_state, new_game_state)
+        |> schedule_game_timeout()
+
+        {:reply, {:ok, topics}, new_state}
 
       # The player was rejected for some reason.
       # Log it, but no need to send notifications.
@@ -110,7 +114,7 @@ defmodule GamePlatform.GameServer do
   @impl true
   def handle_call(:game_type, _from, state) do
     # Return the game module this server is running.
-    {:reply, {:ok, state.game_module}, state}
+    {:reply, {:ok, state.game_module, state.game_module.game_view_module()}, state}
   end
 
   @impl true
@@ -159,15 +163,6 @@ defmodule GamePlatform.GameServer do
       {:error, _reason} ->
         {:noreply, state}
     end
-  end
-
-  @impl true
-  def handle_info(:game_timeout, state) do
-    # TODO: Log game timeout
-    # TODO: Send final notifications (get from game state)
-    {:ok, notifications, new_state} = state.game_module.end_game(state.game_state)
-    send_notifications(notifications, new_state)
-    {:stop, :normal, new_state}
   end
 
   # This should be triggered by the monitors on connected players.
@@ -228,8 +223,27 @@ defmodule GamePlatform.GameServer do
     end
   end
 
-  @impl true
-  def handle_info({:player_disconnect_timeout, player_id}, state) do
+  def handle_info({:server_event, event}, state) do
+    handle_server_event(event, state)
+  end
+
+  # :end_game and :game_timeout are functionally identical
+  # However, they are semantically different.
+  # :end_game is called from within the game state - the game itself has determined that it is over.
+  # :game_timeout happens at the server level, and represents an idle timeout where nothing has happened.
+  defp handle_server_event(:end_game, state) do
+    {:ok, notifications, new_state} = state.game_module.handle_game_shutdown(state.game_state)
+    send_notifications(notifications, new_state)
+    {:stop, :normal, new_state}
+  end
+
+  defp handle_server_event(:game_timeout, state) do
+    {:ok, notifications, new_state} = state.game_module.handle_game_shutdown(state.game_state)
+    send_notifications(notifications, new_state)
+    {:stop, :normal, new_state}
+  end
+
+  defp handle_server_event({:player_disconnect_timeout, player_id}, state) do
     do_remove_player(player_id, state)
   end
 
@@ -248,14 +262,13 @@ defmodule GamePlatform.GameServer do
     |> Map.replace(:connected_player_monitors, connected_player_monitors)
     |> Map.replace(:connected_player_ids, connected_player_ids)
     |> cancel_player_timeout(player_id)
+    |> end_game_if_no_one_is_here()
 
     # Tell the game state that this player is leaving.
     case state.game_module.leave_game(new_state.game_state, player_id) do
       {:ok, notifications, new_game_state} ->
         send_notifications(notifications, new_state)
 
-        # TODO: If we remove the last player, set the game stop timeout for 2 minutes
-        # Need some system for signalling the server to do stuff from within the game state...
         {:noreply, %{new_state | game_state: new_game_state}}
       {:error, _reason} ->
         {:noreply, new_state}
@@ -275,20 +288,15 @@ defmodule GamePlatform.GameServer do
   # then this timeout is never scheduled.
 
   # If the player reconnects before the message can be sent, the scheduled message can be cancelled
-  # by cancelling the timer ref stored in `state.player_timeout_refs[player_id]`.
-  defp schedule_player_timeout(state, player_id) do
-    case state.server_config.player_disconnect_timeout_length do
-      :infinity ->
-        state
-      milis when is_integer(milis) ->
-        timer_ref = Process.send_after(self(), {:player_disconnect_timeout, player_id}, milis)
-
-        state
-        |> cancel_player_timeout(player_id)
-        |> put_in([:player_timeout_refs, player_id], timer_ref)
-      _ ->
-        throw "Invalid config: :player_disconnect_timeout_length"
-    end
+  # by cancelling the timer ref stored in `state.player_timeout_refs[player_id]`.\
+  defp schedule_player_timeout(state, player_id), do: schedule_player_timeout(state, player_id, state.server_config.player_disconnect_timeout_length)
+  # Dropping this case, since due to how the config validation works right now, it's impossible.
+  # defp schedule_player_timeout(state, _player_id, :infinity), do: state
+  defp schedule_player_timeout(state, player_id, millis) when is_integer(millis) do
+    timer_ref = send_self_server_event({:player_disconnect_timeout, player_id}, millis)
+    state
+    |> cancel_player_timeout(player_id)
+    |> put_in([:player_timeout_refs, player_id], timer_ref)
   end
 
   # Cancels the players disconnect timeout, usually because that player has reconnected.
@@ -311,12 +319,23 @@ defmodule GamePlatform.GameServer do
   # If no time is provided, use the default in the config.
   # Breaking it out like this lets us do things like setting the timeout to a lower number after all players have left.
   defp schedule_game_timeout(state), do: schedule_game_timeout(state, state.server_config.game_timeout_length)
-  defp schedule_game_timeout(state, :infinity), do: state
-  defp schedule_game_timeout(state, milis) when is_integer(milis) do
-    timer_ref = Process.send_after(self(), :game_timeout, milis)
+  defp schedule_game_timeout(state, millis) when is_integer(millis) do
+    timer_ref = send_self_server_event(:game_timeout, millis)
     state
     |> cancel_game_timeout()
     |> Map.put(:timeout_ref, timer_ref)
+  end
+
+  defp end_game_if_no_one_is_here(state) do
+    # The last connected player has left the game.
+    # Since no one is here, end the game sooner rather than later.
+    if state.connected_player_ids == MapSet.new() do
+      # Do it as a game timeout, in case a player re-joins.
+      # That way, when if a player _does_ decide to come back, it resets automatically.
+      schedule_game_timeout(state, :timer.minutes(1))
+    else
+      state
+    end
   end
 
   @doc """
@@ -328,7 +347,12 @@ defmodule GamePlatform.GameServer do
   In the context of the game state, these are handled like normal events, except
   the "player_id" is set to `:game`.
   """
-  def send_event_after(event, time) do
+  def send_self_game_event(event, time \\ 0) do
     Process.send_after(self(), {:game_event, event}, time)
   end
+
+  def send_self_server_event(event, time \\ 0) do
+    Process.send_after(self(), {:server_event, event}, time)
+  end
+
 end

@@ -21,19 +21,18 @@ defmodule GamePlatform.Game do
   # TODO: Move some of these Registry.lookup() functions into GameRegistry
 
   def monitor(game_id) do
-    {pid, _} = Registry.lookup(GameRegistry.registry_name(), game_id) |> hd()
+    {:ok, pid} = GameRegistry.lookup(game_id)
     Process.monitor(pid)
-  end
-
-  def send_event_after(event, game_id, time) do
-    case Registry.lookup(GameRegistry.registry_name(), game_id) do
-      [] -> {:error, :not_found}
-      [{pid, _}] -> {:ok, Process.send_after(pid, {:game_event, event}, time)}
-      _ -> {:error, :unknown_error}
-    end
   end
 
   def game_exists?(game_id) do
     Registry.lookup(GameRegistry.registry_name(), game_id) |> Enum.count() > 0
+  end
+
+  def is_game_alive?(game_id) do
+    case Registry.lookup(GameRegistry.registry_name(), game_id) do
+      [] -> false
+      [{pid, _}] -> Process.alive?(pid)
+    end
   end
 end

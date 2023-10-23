@@ -7,6 +7,17 @@
   <br/>
   <br/>
   <br/>
+  <form action="/new-game/minesweeper" method="post">
+    <input type="hidden" name="type" value="custom"/>
+    <input type="hidden" name="height" value="99"/>
+    <input type="hidden" name="width" value="99"/>
+    <input type="hidden" name="num_mines" value="200" />
+    <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()}/>
+    <button>NEW BIG MINESWEEPER GAME</button>
+  </form>
+  <br/>
+  <br/>
+  <br/>
   <form action="/new-game/lightcycles" method="post">
     <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()}/>
     <button>NEW LIGHTCYCLES GAME</button>
