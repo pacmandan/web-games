@@ -241,7 +241,7 @@ defmodule WebGames.Minesweeper.GameState do
   defp end_game(game, status) do
     # TODO: Maybe in the future, allow for this game to "reset" to play again?
     # In which case, we'd need to keep track of this ref to cancel it on reset.
-    GamePlatform.GameServer.send_self_server_event(:end_game, @post_game_timeout)
+    GamePlatform.GameServer.end_game(@post_game_timeout)
 
     game
     |> Map.put(:status, status)

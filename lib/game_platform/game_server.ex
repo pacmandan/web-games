@@ -5,6 +5,8 @@ defmodule GamePlatform.GameServer do
   alias GamePlatform.Notification
   use GenServer, restart: :transient
 
+  require Logger
+
   @default_server_config %{
     game_timeout_length: :timer.minutes(30),
     player_disconnect_timeout_length: :timer.minutes(2),
@@ -64,6 +66,8 @@ defmodule GamePlatform.GameServer do
       game_module: game_module,
       game_config: game_config,
       game_state: nil,
+      start_time: DateTime.utc_now(),
+      start_time_mono: System.monotonic_time(),
       server_config: server_config,
       timeout_ref: nil,
       # TODO: Look more into Phoenix.Presence and Phoenix.Tracker to see if it could replace or augment this.
@@ -85,16 +89,22 @@ defmodule GamePlatform.GameServer do
     |> Map.put(:game_state, game_state)
     |> schedule_game_timeout()
 
+    emit_game_start(state)
+
     {:noreply, new_state}
   end
 
   @impl true
-  def handle_call({:join_game, player}, _from, state) do
+  def handle_call({:join_game, player_id}, _from, state) do
     # Tell the game server a player is attempting to join.
-    case state.game_module.join_game(state.game_state, player) do
+    case state.game_module.join_game(state.game_state, player_id) do
       # A player joined the state, tell everyone about it.
       {:ok, topic_refs, notifications, new_game_state} ->
         send_notifications(notifications, state)
+        # TODO: Should we cache these in the server state? (per-player?)
+        # TODO: Send the topic refs instead of the topics
+        # The "subscribe" function should live in the Notification module,
+        # and should automatically translate refs to topic strings.
         topics = Enum.map(topic_refs, &(Notification.get_topic(&1, state.game_id)))
 
         new_state = state
@@ -231,20 +241,28 @@ defmodule GamePlatform.GameServer do
   # However, they are semantically different.
   # :end_game is called from within the game state - the game itself has determined that it is over.
   # :game_timeout happens at the server level, and represents an idle timeout where nothing has happened.
+  # TODO: Reflect the different stop conditions in metrics and logs
   defp handle_server_event(:end_game, state) do
-    {:ok, notifications, new_state} = state.game_module.handle_game_shutdown(state.game_state)
-    send_notifications(notifications, new_state)
-    {:stop, :normal, new_state}
+    Logger.info("Game #{state.game_id} has ended normally")
+    emit_game_stop(state, :normal)
+    halt_game(state)
   end
 
   defp handle_server_event(:game_timeout, state) do
-    {:ok, notifications, new_state} = state.game_module.handle_game_shutdown(state.game_state)
-    send_notifications(notifications, new_state)
-    {:stop, :normal, new_state}
+    Logger.info("Game #{state.game_id} has timed out due to inactivity")
+    emit_game_stop(state, :game_timeout)
+    halt_game(state)
   end
 
   defp handle_server_event({:player_disconnect_timeout, player_id}, state) do
     do_remove_player(player_id, state)
+  end
+
+  defp halt_game(state) do
+    {:ok, notifications, new_state} = state.game_module.handle_game_shutdown(state.game_state)
+    # TODO: Add a server-level notification (somehow)
+    send_notifications(notifications, new_state)
+    {:stop, :normal, new_state}
   end
 
   # Remove the given player from the game.
@@ -351,8 +369,30 @@ defmodule GamePlatform.GameServer do
     Process.send_after(self(), {:game_event, event}, time)
   end
 
-  def send_self_server_event(event, time \\ 0) do
+  defp send_self_server_event(event, time) do
     Process.send_after(self(), {:server_event, event}, time)
   end
 
+  def end_game(after_millis \\ 0) do
+    send_self_server_event(:end_game, after_millis)
+  end
+
+  # Telemetry functions
+  defp emit_game_start(state) do
+    :telemetry.execute(
+      [:game_platform, :server, :start],
+      %{system_time: System.system_time()},
+      %{game_id: state.game_id, game_type: state.game_module |> to_string()}
+    )
+  end
+
+  def emit_game_stop(state, status) do
+    duration = System.monotonic_time() - state.start_time_mono
+
+    :telemetry.execute(
+      [:game_platform, :server, :stop],
+      %{duration: duration},
+      %{game_id: state.game_id, game_type: state.game_module |> to_string(), status: status |> to_string()}
+    )
+  end
 end
