@@ -290,7 +290,7 @@ defmodule WebGames.LightCycles.GameState do
       #   |> add_notification(:all, {:winner, winner_id})
       0 ->
         # Tie
-        GameServer.send_self_server_event(:end_game, :timer.minutes(2))
+        GameServer.end_game(:timer.minutes(2))
         new_state
         |> add_notification(:all, :draw)
         |> pause_game()
