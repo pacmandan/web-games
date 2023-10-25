@@ -89,7 +89,7 @@ defmodule GamePlatform.GameServer do
     |> Map.put(:game_state, game_state)
     |> schedule_game_timeout()
 
-    emit_game_start(state)
+    # emit_game_start(state)
 
     {:noreply, new_state}
   end
@@ -223,7 +223,7 @@ defmodule GamePlatform.GameServer do
         |> Map.replace(:game_state, new_game_state)
         # |> Map.replace(:timeout_ref, new_timeout_ref)
 
-        send_notifications(notifications, state)
+        send_notifications(notifications, new_state)
 
         {:noreply, new_state}
 
@@ -244,13 +244,13 @@ defmodule GamePlatform.GameServer do
   # TODO: Reflect the different stop conditions in metrics and logs
   defp handle_server_event(:end_game, state) do
     Logger.info("Game #{state.game_id} has ended normally")
-    emit_game_stop(state, :normal)
+    # emit_game_stop(state, :normal)
     halt_game(state)
   end
 
   defp handle_server_event(:game_timeout, state) do
     Logger.info("Game #{state.game_id} has timed out due to inactivity")
-    emit_game_stop(state, :game_timeout)
+    # emit_game_stop(state, :game_timeout)
     halt_game(state)
   end
 
@@ -259,8 +259,12 @@ defmodule GamePlatform.GameServer do
   end
 
   defp halt_game(state) do
-    {:ok, notifications, new_state} = state.game_module.handle_game_shutdown(state.game_state)
-    # TODO: Add a server-level notification (somehow)
+    {:ok, notifications, new_game_state} = state.game_module.handle_game_shutdown(state.game_state)
+
+    new_state = state
+    |> Map.replace(:game_state, new_game_state)
+
+    # TODO: Add a server-level notification (somehow)?
     send_notifications(notifications, new_state)
     {:stop, :normal, new_state}
   end
@@ -377,22 +381,22 @@ defmodule GamePlatform.GameServer do
     send_self_server_event(:end_game, after_millis)
   end
 
-  # Telemetry functions
-  defp emit_game_start(state) do
-    :telemetry.execute(
-      [:game_platform, :server, :start],
-      %{system_time: System.system_time()},
-      %{game_id: state.game_id, game_type: state.game_module |> to_string()}
-    )
-  end
+  # # Telemetry functions
+  # defp emit_game_start(state) do
+  #   :telemetry.execute(
+  #     [:game_platform, :server, :start],
+  #     %{system_time: System.system_time()},
+  #     %{game_id: state.game_id, game_type: state.game_module |> to_string()}
+  #   )
+  # end
 
-  def emit_game_stop(state, status) do
-    duration = System.monotonic_time() - state.start_time_mono
+  # defp emit_game_stop(state, status) do
+  #   duration = System.monotonic_time() - state.start_time_mono
 
-    :telemetry.execute(
-      [:game_platform, :server, :stop],
-      %{duration: duration},
-      %{game_id: state.game_id, game_type: state.game_module |> to_string(), status: status |> to_string()}
-    )
-  end
+  #   :telemetry.execute(
+  #     [:game_platform, :server, :stop],
+  #     %{duration: duration},
+  #     %{game_id: state.game_id, game_type: state.game_module |> to_string(), status: status |> to_string()}
+  #   )
+  # end
 end

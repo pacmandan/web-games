@@ -10,5 +10,8 @@ config :web_games, WebGamesWeb.Endpoint, cache_static_manifest: "priv/static/cac
 # Do not print debug messages in production
 config :logger, level: :info
 
+config :web_games, :telemetry,
+  reporter_type: :statsd
+
 # Runtime production configuration, including reading
 # of environment variables, is done on config/runtime.exs.

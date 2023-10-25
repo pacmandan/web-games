@@ -1,0 +1,40 @@
+receivers:
+  # statsd:
+  #   endpoint: "localhost:8127"
+  #   aggregation_interval: 10s
+
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: app
+          scrape_interval: 10s
+          static_configs:
+          - targets: ['app:9568']
+
+  # prometheus:
+  #   config:
+  #     scrape_configs:
+  #     - job_name: 'otelcol'
+  #       scrape_interval: 10s
+  #       static_configs:
+  #       - targets: ['0.0.0.0:8888']
+  #       metric_relabel_configs:
+  #         - source_labels: [ __name__ ]
+  #           regex: '.*grpc_io.*'
+  #           action: drop
+
+exporters:
+  debug:
+    verbosity: detailed
+
+extensions:
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [zpages]
+  pipelines:
+    metrics:
+     receivers: [prometheus]
+     processors: []
+     exporters: [debug]
