@@ -13,11 +13,33 @@ defmodule WebGamesWeb.Telemetry do
       # every 10_000ms. Learn more here: https://hexdocs.pm/telemetry_metrics
       {:telemetry_poller, measurements: periodic_measurements(), period: 10_000},
       # Add reporters as children of your supervision tree.
-      # TODO: Set up a production place for these to go.
-      {Telemetry.Metrics.ConsoleReporter, metrics: GamePlatform.Telemetry.metrics()}
     ]
 
-    Supervisor.init(children, strategy: :one_for_one)
+    # Eventually add the rest
+    metrics = GamePlatform.Telemetry.metrics()
+
+    reporter = case Application.get_env(:web_games, :telemetry)[:reporter_type] do
+      :none -> []
+      :console -> [{Telemetry.Metrics.ConsoleReporter, metrics: metrics}]
+      :prometheus -> configure_prometheus_reporter(metrics)
+      :statsd -> configure_statsd_reporter(metrics)
+      _ -> []
+    end
+
+    Supervisor.init(children ++ reporter, strategy: :one_for_one)
+  end
+
+  defp configure_prometheus_reporter(metrics) do
+    [{TelemetryMetricsPrometheus, metrics: metrics, port: Application.get_env(:web_games, :telemetry_prometheus)[:port]}]
+  end
+
+  defp configure_statsd_reporter(metrics) do
+    host = Application.get_env(:web_games, :telemetry_statsd)[:host]
+    port = Application.get_env(:web_games, :telemetry_statsd)[:port]
+    case Application.get_env(:web_games, :telemetry_statsd)[:socket] do
+      nil -> [{TelemetryMetricsStatsd, metrics: metrics, host: host, port: port}]
+      socket -> [{TelemetryMetricsStatsd, metrics: metrics, socket_path: socket}]
+    end
   end
 
   def metrics do
@@ -65,6 +87,7 @@ defmodule WebGamesWeb.Telemetry do
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
       # {WebGamesWeb, :count_users, []}
+      {GamePlatform.Telemetry, :count_active_games, []}
     ]
   end
 end

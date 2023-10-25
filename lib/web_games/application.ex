@@ -23,7 +23,7 @@ defmodule WebGames.Application do
       # GameSupervisor
       {GamePlatform.GameSupervisor, []},
       # Registry
-      {Registry, [keys: :unique, name: :game_registry]},
+      {Registry, [keys: :unique, name: GamePlatform.GameRegistry.registry_name()]},
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

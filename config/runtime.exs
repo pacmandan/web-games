@@ -20,6 +20,22 @@ if System.get_env("PHX_SERVER") do
   config :web_games, WebGamesWeb.Endpoint, server: true
 end
 
+config :web_games, :telemetry,
+  reporter_type: (case System.get_env("METRICS_TYPE") do
+    "statsd" -> :statsd
+    "console" -> :console
+    "prometheus" -> :prometheus
+    _ -> :none
+  end)
+
+config :web_games, :telemetry_statsd,
+  host: System.get_env("METRICS_STATSD_HOST", "localhost"),
+  port: System.get_env("METRICS_STATSD_PORT", "8125") |> String.to_integer(),
+  socket: System.get_env("METRICS_STATSD_SOCKET")
+
+config :web_games, :telemetry_prometheus,
+  port: System.get_env("METRICS_PROMETHEUS_PORT", "9568") |> String.to_integer()
+
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
