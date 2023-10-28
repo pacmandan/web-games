@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile.local
+    command: ["/bin/bash", "./scripts/entrypoint.sh"]
     ports:
     - 4000:4000
     environment:
