@@ -22,4 +22,4 @@ ENV MIX_ENV="dev"
 
 EXPOSE 4000
 
-CMD ["/bin/bash", "./scripts/entrypoint.sh"]
+CMD ["mix", "phx.server"]
