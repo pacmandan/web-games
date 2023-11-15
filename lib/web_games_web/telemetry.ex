@@ -21,16 +21,11 @@ defmodule WebGamesWeb.Telemetry do
     reporter = case Application.get_env(:web_games, :telemetry)[:reporter_type] do
       :none -> []
       :console -> [{Telemetry.Metrics.ConsoleReporter, metrics: metrics}]
-      :prometheus -> configure_prometheus_reporter(metrics)
       :statsd -> configure_statsd_reporter(metrics)
       _ -> []
     end
 
     Supervisor.init(children ++ reporter, strategy: :one_for_one)
-  end
-
-  defp configure_prometheus_reporter(metrics) do
-    [{TelemetryMetricsPrometheus, metrics: metrics, port: Application.get_env(:web_games, :telemetry_prometheus)[:port]}]
   end
 
   defp configure_statsd_reporter(metrics) do
@@ -87,7 +82,7 @@ defmodule WebGamesWeb.Telemetry do
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
       # {WebGamesWeb, :count_users, []}
-      {GamePlatform.Telemetry, :count_active_games, []}
+      # {GamePlatform.Telemetry, :count_active_games, []}
     ]
   end
 end

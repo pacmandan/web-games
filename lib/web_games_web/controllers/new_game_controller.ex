@@ -10,7 +10,7 @@ defmodule WebGamesWeb.NewGameController do
 
     # TODO: Handle config validation
     minesweeper_config = Minesweeper.Config.custom(width, height, num_mines)
-    {game_id, _} = WebGames.start_minesweeper(player_id, minesweeper_config)
+    {:ok, game_id, _} = WebGames.start_minesweeper(player_id, minesweeper_config)
 
     conn
     |> put_session("game_id", game_id)

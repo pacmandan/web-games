@@ -9,7 +9,15 @@ defmodule WebGames.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      releases: [
+        web_games: [
+          applications: [
+            opentelemetry_exporter: :permanent,
+            opentelemetry: :temporary
+          ]
+        ]
+      ],
     ]
   end
 
@@ -19,7 +27,7 @@ defmodule WebGames.MixProject do
   def application do
     [
       mod: {WebGames.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :tls_certificate_check],
     ]
   end
 
@@ -46,7 +54,11 @@ defmodule WebGames.MixProject do
       {:jason, "~> 1.2"},
       {:plug_cowboy, "~> 2.5"},
       {:telemetry_metrics_statsd, "~> 0.6.0"},
-      {:telemetry_metrics_prometheus, "~> 1.1.0"}
+      {:opentelemetry, "~> 1.3"},
+      {:opentelemetry_api, "~> 1.2"},
+      {:opentelemetry_exporter, "~> 1.6"},
+      {:opentelemetry_phoenix, "~> 1.1"},
+      {:opentelemetry_cowboy, "~> 0.2"},
     ]
   end
 

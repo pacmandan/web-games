@@ -41,6 +41,7 @@ defmodule GamePlatform.Notification do
 
   def send_one(%__MODULE__{to: to, msgs: msgs, type: type}, game_id, pubsub) do
     # TODO: Resend on failure?
+    # TODO: Send span ctx
     Phoenix.PubSub.broadcast(pubsub, get_topic(to, game_id), {type, game_id, msgs})
   end
 

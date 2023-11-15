@@ -13,9 +13,10 @@ defmodule WebGames.Minesweeper.GameState do
   @post_game_timeout :timer.minutes(2)
 
   use GamePlatform.GameState, view_module: WebGamesWeb.Minesweeper.Play
+  # use Sibyl
 
   alias WebGames.Minesweeper.Config
-  alias WebGames.Minesweeper.Display
+  # alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
   alias GamePlatform.Notification
 
@@ -42,7 +43,7 @@ defmodule WebGames.Minesweeper.GameState do
         num_mines: config.num_mines,
         grid: create_blank_grid(config),
       }
-      Display.display_grid(game)
+      # Display.display_grid(game)
       {:ok, game}
     else
       # TODO: Return WHICH error caused the config to not be valid
@@ -110,6 +111,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
+  # @decorate trace()
   def player_connected(game, player_id) do
     if player_id == game.player do
       # Pre-calculate this so we don't do it inside the loop a bunch of times.
@@ -146,7 +148,7 @@ defmodule WebGames.Minesweeper.GameState do
     |> update_status()
     |> take_notifications()
 
-    Display.display_grid(g, true)
+    # Display.display_grid(g, true)
 
     {:ok, n, g}
   end
@@ -158,7 +160,7 @@ defmodule WebGames.Minesweeper.GameState do
     |> update_status()
     |> take_notifications()
 
-    Display.display_grid(g, true)
+    # Display.display_grid(g, true)
 
     {:ok, n, g}
   end
@@ -168,7 +170,7 @@ defmodule WebGames.Minesweeper.GameState do
     {n, g} = toggle_flag(space, game)
     |> take_notifications()
 
-    Display.display_grid(g, true)
+    # Display.display_grid(g, true)
 
     {:ok, n, g}
   end
