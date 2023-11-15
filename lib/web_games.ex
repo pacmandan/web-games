@@ -27,10 +27,10 @@ defmodule WebGames do
   end
 
   # TODO: Wrap this in a ":dev" check
-  def start_observer() do
-    Mix.ensure_application!(:wx)
-    Mix.ensure_application!(:runtime_tools)
-    Mix.ensure_application!(:observer)
-    :observer.start()
-  end
+  # def start_observer() do
+  #   Mix.ensure_application!(:wx)
+  #   Mix.ensure_application!(:runtime_tools)
+  #   Mix.ensure_application!(:observer)
+  #   :observer.start()
+  # end
 end

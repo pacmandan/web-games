@@ -50,6 +50,9 @@ config :phoenix, :json_library, Jason
 config :web_games, :telemetry,
   reporter_type: :none
 
+config :opentelemetry, :resource,
+  service: %{name: "web_games"}
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

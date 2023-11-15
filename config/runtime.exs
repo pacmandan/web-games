@@ -24,7 +24,6 @@ config :web_games, :telemetry,
   reporter_type: (case System.get_env("METRICS_TYPE") do
     "statsd" -> :statsd
     "console" -> :console
-    "prometheus" -> :prometheus
     _ -> :none
   end)
 
@@ -33,8 +32,13 @@ config :web_games, :telemetry_statsd,
   port: System.get_env("METRICS_STATSD_PORT", "8125") |> String.to_integer(),
   socket: System.get_env("METRICS_STATSD_SOCKET")
 
-config :web_games, :telemetry_prometheus,
-  port: System.get_env("METRICS_PROMETHEUS_PORT", "9568") |> String.to_integer()
+config :opentelemetry,
+  traces_exporter: :otlp
+
+config :opentelemetry_exporter,
+  otlp_protocol: :http_protobuf,
+  otlp_endpoint: "http://otel:4318"
+
 
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.

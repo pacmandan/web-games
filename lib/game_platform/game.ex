@@ -7,6 +7,7 @@ defmodule GamePlatform.Game do
   end
 
   def send_event(event, from, game_id) do
+    # TODO: Add span context
     GenServer.cast(GameServer.via_tuple(game_id), {:game_event, from, event})
   end
 

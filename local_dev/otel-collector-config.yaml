@@ -1,15 +1,12 @@
 receivers:
-  # statsd:
-  #   endpoint: "localhost:8127"
-  #   aggregation_interval: 10s
+  statsd:
+    endpoint: "0.0.0.0:8127"
+    aggregation_interval: 5s
 
-  prometheus:
-    config:
-      scrape_configs:
-        - job_name: app
-          scrape_interval: 10s
-          static_configs:
-          - targets: ['app:9568']
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318"
 
   # prometheus:
   #   config:
@@ -24,6 +21,11 @@ receivers:
   #           action: drop
 
 exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
   debug:
     verbosity: detailed
 
@@ -35,6 +37,10 @@ service:
   extensions: [zpages]
   pipelines:
     metrics:
-     receivers: [prometheus]
-     processors: []
-     exporters: [debug]
+      receivers: [statsd]
+      processors: []
+      exporters: [debug]
+    traces:
+      receivers: [otlp]
+      processors: []
+      exporters: [debug, otlp/jaeger]

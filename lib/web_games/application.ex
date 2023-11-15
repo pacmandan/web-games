@@ -7,6 +7,9 @@ defmodule WebGames.Application do
 
   @impl true
   def start(_type, _args) do
+    # :opentelemetry_cowboy.setup()
+    # OpentelemetryPhoenix.setup(adapter: :cowboy2)
+
     children = [
       # Start the Telemetry supervisor
       WebGamesWeb.Telemetry,
@@ -24,12 +27,17 @@ defmodule WebGames.Application do
       {GamePlatform.GameSupervisor, []},
       # Registry
       {Registry, [keys: :unique, name: GamePlatform.GameRegistry.registry_name()]},
+      # {Task.Supervisor, name: WebGames.TaskSupervisor}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: WebGames.Supervisor]
     Supervisor.start_link(children, opts)
+  after
+    # Task.Supervisor.start_child(WebGames.TaskSupervisor, fn ->
+    #   Sibyl.Handlers.attach_all_events(Sibyl.Handlers.OpenTelemetry)
+    # end)
   end
 
   # Tell Phoenix to update the endpoint configuration
