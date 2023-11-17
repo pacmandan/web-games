@@ -12,12 +12,12 @@ defmodule WebGamesWeb.PlayController do
       {:ok, topics} = Game.join_game(player_id, game_id)
 
       # TODO: Maybe this is the key? Put this into the generic view?
-      {:ok, _state_module, render_module} = Game.get_game_type(game_id)
+      # {:ok, _state_module, render_module} = Game.get_game_type(game_id)
 
       conn
       |> put_session("game_id", game_id)
       |> put_session("topics", topics)
-      |> live_render(render_module)
+      |> live_render(GamePlatform.PlayerView)
     else
       conn
       |> clear_session()
