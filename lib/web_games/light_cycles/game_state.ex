@@ -2,7 +2,7 @@ defmodule WebGames.LightCycles.GameState do
   alias GamePlatform.Notification
   alias GamePlatform.GameServer
 
-  use GamePlatform.GameState, view_module: WebGamesWeb.LightCycles.Play
+  use GamePlatform.GameState, view_module: WebGamesWeb.LightCycles.PlayerState
 
   defstruct [
     free_spaces: MapSet.new(),

@@ -12,7 +12,7 @@ defmodule WebGames.Minesweeper.GameState do
 
   @post_game_timeout :timer.minutes(2)
 
-  use GamePlatform.GameState, view_module: WebGamesWeb.Minesweeper.Play
+  use GamePlatform.GameState, view_module: WebGamesWeb.Minesweeper.PlayerState
   # use Sibyl
 
   alias WebGames.Minesweeper.Config
