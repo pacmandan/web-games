@@ -4,40 +4,33 @@ defmodule GamePlatform.PlayerView do
 
   alias GamePlatform.Game
 
-  def mount(_params, session, socket) do
+  def mount(%{"game_id" => game_id} = _params, %{"player_id" => player_id} = _session, socket) do
+    socket = socket
+    |> assign(:game_id, game_id)
+    |> assign(:player_id, player_id)
+
     if connected?(socket) do
-      connected_mount(socket, session)
+      # Socket is connected, try connecting to the game.
+
+      socket
+      |> join_game()
+      |> fetch_game_type()
+      |> monitor_game()
+      |> connect_player()
+      |> schedule_reconnect_attempt()
+      |> assign(:connection_state, :syncing)
+      |> init_view_module()
     else
       {:ok, assign(socket, connection_state: :loading)}
     end
   end
 
-  defp connected_mount(socket, %{"game_id" => game_id, "player_id" => player_id, "topics" => topics}) do
-    if Game.game_exists?(game_id) do
-      subscribe_to_pubsub(topics)
+  defp join_game(%{assigns: %{player_id: player_id, game_id: game_id}} = socket) do
+    {:ok, topics} = Game.join_game(player_id, game_id)
 
-      socket
-      |> store_ids_in_assigns(game_id, player_id, topics)
-      |> fetch_game_type()
-      |> connect_player()
-      |> schedule_reconnect_attempt()
-      |> monitor_game()
-      |> init_view_module()
-      # init/1 will return the LiveView mount return type ({:ok, socket, opts})
-    else
-      socket = socket
-      |> put_flash(:error, "Game with id #{game_id} does not exist")
-      |> redirect(to: "/select-game")
-      {:ok, socket}
-    end
-  end
+    subscribe_to_pubsub(topics)
 
-  defp connected_mount(socket, _session) do
-    socket = socket
-    |> put_flash(:error, "Invalid session state, cannot connect to game")
-    |> redirect(to: "/select-game")
-
-    {:ok, socket}
+    assign(socket, :topics, topics)
   end
 
   defp init_view_module(socket) do
@@ -157,13 +150,6 @@ defmodule GamePlatform.PlayerView do
       Process.demonitor(socket.assigns[:game_monitor])
     end
     assign(socket, :game_monitor, Game.monitor(socket.assigns.game_id))
-  end
-
-  defp store_ids_in_assigns(socket, game_id, player_id, topics) do
-    socket
-    |> assign(:game_id, game_id)
-    |> assign(:player_id, player_id)
-    |> assign(:topics, topics)
   end
 
   defp connect_player(%{assigns: %{game_id: game_id, player_id: player_id}} = socket) do
