@@ -16,6 +16,11 @@ defmodule WebGamesWeb.Router do
 
   pipeline :game do
     plug GamePlatform.Plugs.PlayerIdPlug
+    plug GamePlatform.Plugs.GameExistsPlug
+  end
+
+  pipeline :test_game do
+    plug GamePlatform.Plugs.PlayerIdPlug
     #plug GamePlatform.Plugs.GameExistsPlug
   end
 
@@ -23,17 +28,22 @@ defmodule WebGamesWeb.Router do
     pipe_through [:browser]
 
     get "/", PageController, :home
-    live "/test/:game_id", Test
     get "/select-game", SelectGameController, :select_game
     post "/new-game/minesweeper", NewGameController, :start_minesweeper
     post "/new-game/lightcycles", NewGameController, :start_lightcycles
-    get "/play/:game_id", PlayController, :connect_to_game
+    # get "/play/:game_id", PlayController, :connect_to_game
   end
 
-  scope "/play2", WebGamesWeb do
-    pipe_through [:browser, :game]
+  scope "/test", WebGamesWeb do
+    pipe_through [:browser, :test_game]
 
     live ":game_id", Test
+  end
+
+  scope "/play" do
+    pipe_through [:browser, :game]
+
+    live ":game_id", GamePlatform.PlayerView
   end
 
   # Other scopes may use custom stacks.
