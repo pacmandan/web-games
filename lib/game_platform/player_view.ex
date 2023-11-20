@@ -9,26 +9,34 @@ defmodule GamePlatform.PlayerView do
     |> assign(:game_id, game_id)
     |> assign(:player_id, player_id)
 
-    if connected?(socket) do
-      # Socket is connected, try connecting to the game.
-
-      socket
-      |> join_game()
-      |> fetch_game_type()
-      |> monitor_game()
-      |> connect_player()
-      |> schedule_reconnect_attempt()
-      |> assign(:connection_state, :syncing)
-      |> init_view_module()
-    else
-      {:ok, assign(socket, connection_state: :loading)}
+    cond do
+      # Include this here so we can auto-redirect on mount (without needing a reload)
+      not Game.is_game_alive?(game_id) ->
+        socket = socket
+        |> put_flash(:error, "Game with id #{game_id} does not exist")
+        |> redirect(to: "/select-game")
+        {:ok, socket}
+      connected?(socket) ->
+        socket
+        |> fetch_game_type()
+        |> join_game()
+        |> monitor_game()
+        |> connect_player()
+        |> schedule_reconnect_attempt()
+        |> init_view_module()
+      true ->
+        {:ok, assign(socket, connection_state: :loading)}
     end
   end
 
   defp join_game(%{assigns: %{player_id: player_id, game_id: game_id}} = socket) do
     {:ok, topics} = Game.join_game(player_id, game_id)
 
-    subscribe_to_pubsub(topics)
+    # TODO: Make which PubSub is used configurable
+    Enum.each(topics, fn topic ->
+      Phoenix.PubSub.unsubscribe(WebGames.PubSub, topic)
+      Phoenix.PubSub.subscribe(WebGames.PubSub, topic)
+    end)
 
     assign(socket, :topics, topics)
   end
@@ -135,14 +143,6 @@ defmodule GamePlatform.PlayerView do
   def render(assigns) do
     # Delegate render to the implementation module
     assigns.game_view_module.render(assigns)
-  end
-
-  defp subscribe_to_pubsub(topics) do
-    # TODO: Make which PubSub is used configurable
-    Enum.each(topics, fn topic ->
-      Phoenix.PubSub.unsubscribe(WebGames.PubSub, topic)
-      Phoenix.PubSub.subscribe(WebGames.PubSub, topic)
-    end)
   end
 
   defp monitor_game(socket) when not (socket.assigns.game_id |> is_nil()) do
