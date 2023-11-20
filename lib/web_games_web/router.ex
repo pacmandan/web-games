@@ -14,15 +14,26 @@ defmodule WebGamesWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :game do
+    plug GamePlatform.Plugs.PlayerIdPlug
+    #plug GamePlatform.Plugs.GameExistsPlug
+  end
+
   scope "/", WebGamesWeb do
-    pipe_through :browser
+    pipe_through [:browser]
 
     get "/", PageController, :home
-    live "/test", Test
+    live "/test/:game_id", Test
     get "/select-game", SelectGameController, :select_game
     post "/new-game/minesweeper", NewGameController, :start_minesweeper
     post "/new-game/lightcycles", NewGameController, :start_lightcycles
     get "/play/:game_id", PlayController, :connect_to_game
+  end
+
+  scope "/play2", WebGamesWeb do
+    pipe_through [:browser, :game]
+
+    live ":game_id", Test
   end
 
   # Other scopes may use custom stacks.

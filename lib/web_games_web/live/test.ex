@@ -1,12 +1,26 @@
 defmodule WebGamesWeb.Test do
   use WebGamesWeb, :live_view
 
-  def mount(_params, _session, socket) do
+  def mount(params, session, socket) do
+    IO.inspect("ON MOUNT")
+    IO.inspect("MOUNT PARAMS")
+    IO.inspect(params)
+    IO.inspect("MOUNT SESSION")
+    IO.inspect(session)
+    IO.inspect("MOUNT SOCKET")
+    IO.inspect(socket, limit: :infinity)
     socket = socket
     |> assign(:height, 100)
     |> assign(:width, 100)
     |> assign(:grid, create_blank_grid(100, 100))
     {:ok, socket}
+  end
+
+  def handle_params(unsigned_params, uri, socket) do
+    IO.inspect("HANDLE PARAMS")
+    IO.inspect(unsigned_params)
+    IO.inspect(uri)
+    {:noreply, socket}
   end
 
   defp all_coords(width, height) do
@@ -20,6 +34,7 @@ defmodule WebGamesWeb.Test do
   end
 
   def render(assigns) do
+    IO.inspect("RENDERING")
     ~H"""
     TESTING!!!
     <div style={"display:grid; grid-template-columns:repeat(#{@width},1fr); grid-template-rows:repeat(#{@height},1fr);"}>
