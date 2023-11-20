@@ -19,6 +19,7 @@ defmodule GamePlatform.PlayerState do
       @behaviour GamePlatform.PlayerState
 
       def handle_game_crash(socket, _), do: socket
+      def handle_event(socket, _), do: {:noreply, socket}
       defoverridable GamePlatform.PlayerState
     end
   end

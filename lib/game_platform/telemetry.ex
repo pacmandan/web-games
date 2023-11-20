@@ -1,8 +1,5 @@
 defmodule GamePlatform.Telemetry do
-  @prefix [:game_platform]
-
   import Telemetry.Metrics
-  require OpenTelemetry.Tracer, as: Tracer
 
   def metrics() do
     [
@@ -28,9 +25,5 @@ defmodule GamePlatform.Telemetry do
         %{}
       )
     end
-  end
-
-  def set_span_attribute(key, value) do
-    Tracer.set_attribute(key, value)
   end
 end

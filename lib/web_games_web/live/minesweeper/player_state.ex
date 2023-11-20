@@ -33,23 +33,19 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
 
   @impl true
   def handle_sync(socket, msgs) do
-    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), fn msg, acc ->
-      process_event(msg, acc)
-    end)
+    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), &process_event/2)
 
     assign(socket, new_assigns)
   end
 
   @impl true
   def handle_game_event(socket, msgs) do
-    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), fn msg, acc ->
-      process_event(msg, acc)
-    end)
+    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), &process_event/2)
 
     assign(socket, new_assigns)
   end
 
-  def process_event({:click, cells}, %{grid: grid} = assigns) do
+  defp process_event({:click, cells}, %{grid: grid} = assigns) do
     new_grid = Enum.into(cells, grid, fn {coord, clicked?} ->
       {coord, %{grid[coord] | clicked?: clicked?}}
     end)
@@ -59,7 +55,7 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
     |> render_cells(Map.keys(cells))
   end
 
-  def process_event({:open, cells}, %{grid: grid} = assigns) do
+  defp process_event({:open, cells}, %{grid: grid} = assigns) do
     new_grid = Enum.into(cells, grid, fn {coord, value} ->
       {coord, %{grid[coord] | value: value, opened?: true}}
     end)
@@ -69,7 +65,7 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
     |> render_cells(Map.keys(cells))
   end
 
-  def process_event({:flag, cells}, %{grid: grid} = assigns) do
+  defp process_event({:flag, cells}, %{grid: grid} = assigns) do
     new_grid = Enum.into(cells, grid, fn {coord, flagged?} ->
       {coord, %{grid[coord] | flagged?: flagged?}}
     end)
@@ -79,26 +75,26 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
     |> render_cells(Map.keys(cells))
   end
 
-  def process_event({:game_over, :lose}, assigns) do
+  defp process_event({:game_over, :lose}, assigns) do
     assigns
     |> Map.put(:status, :lose)
     |> Map.put(:clicks_enabled?, false)
     |> render_full_grid()
   end
 
-  def process_event({:game_over, :win}, assigns) do
+  defp process_event({:game_over, :win}, assigns) do
     assigns
     |> Map.put(:status, :win)
     |> Map.put(:clicks_enabled?, false)
     |> render_full_grid()
   end
 
-  def process_event({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status}}, assigns) do
+  defp process_event({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status}}, assigns) do
     Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n, status: status})
     |> render_full_grid()
   end
 
-  def process_event({:show_mines, coord_list}, %{grid: grid} = assigns) do
+  defp process_event({:show_mines, coord_list}, %{grid: grid} = assigns) do
     new_grid = Enum.into(coord_list, grid, fn coord ->
       {coord, %{grid[coord] | has_mine?: true}}
     end)

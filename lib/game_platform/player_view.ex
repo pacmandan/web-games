@@ -146,13 +146,10 @@ defmodule GamePlatform.PlayerView do
 
   defp subscribe_to_pubsub(topics) do
     # TODO: Make which PubSub is used configurable
-    unsubscribe_from_pubsub(topics)
-    Enum.each(topics, fn topic -> Phoenix.PubSub.subscribe(WebGames.PubSub, topic) end)
-  end
-
-  defp unsubscribe_from_pubsub(topics) do
-    # Does this need to be a separate function?
-    Enum.each(topics, fn topic -> Phoenix.PubSub.unsubscribe(WebGames.PubSub, topic) end)
+    Enum.each(topics, fn topic ->
+      Phoenix.PubSub.unsubscribe(WebGames.PubSub, topic)
+      Phoenix.PubSub.subscribe(WebGames.PubSub, topic)
+    end)
   end
 
   defp monitor_game(socket) when not (socket.assigns.game_id |> is_nil()) do

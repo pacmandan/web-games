@@ -21,33 +21,8 @@ defmodule WebGamesWeb.LightCycles.PlayerState do
     }
   end
 
-  def handle_game_event(socket, msgs) do
-    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), fn msg, acc ->
-      # IO.inspect("MSG: #{inspect(msg)}")
-      process_event(msg, acc)
-    end)
-
-    socket = socket
-    |> assign(new_assigns)
-    |> draw_grid()
-
-    socket
-  end
-
-  @spec handle_sync(atom() | %{:assigns => map(), optional(any()) => any()}, any()) ::
-          {:noreply, any()}
-  def handle_sync(socket, msgs) do
-    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), fn msg, acc ->
-      # IO.inspect("MSG: #{inspect(msg)}")
-      process_event(msg, acc)
-    end)
-
-    socket = socket
-    |> assign(new_assigns)
-    |> draw_grid()
-
-    socket
-  end
+  def handle_game_event(socket, msgs), do: process_events(socket, msgs)
+  def handle_sync(socket, msgs), do: process_events(socket, msgs)
 
   def handle_info({:display_event, _game_id, :clear_display}, socket) do
     {:noreply, assign(socket, %{display: ""})}
@@ -74,6 +49,16 @@ defmodule WebGamesWeb.LightCycles.PlayerState do
 
   def handle_event("turn", %{"key" => _}, socket) do
     {:noreply, socket}
+  end
+
+  defp process_events(socket, msgs) do
+    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), &process_event/2)
+
+    socket = socket
+    |> assign(new_assigns)
+    |> draw_grid()
+
+    socket
   end
 
   defp process_event(:start_game, assigns) do
