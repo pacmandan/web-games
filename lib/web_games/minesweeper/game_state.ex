@@ -15,10 +15,11 @@ defmodule WebGames.Minesweeper.GameState do
   use GamePlatform.GameState, view_module: WebGamesWeb.Minesweeper.PlayerState
   # use Sibyl
 
+  alias GamePlatform.PubSubMessage
   alias WebGames.Minesweeper.Config
   # alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
-  alias GamePlatform.Notification
+  # alias GamePlatform.Notification
 
   @type notification_t :: {String.t() | atom(), any()}
   @type coord_t :: {integer(), integer()}
@@ -258,16 +259,18 @@ defmodule WebGames.Minesweeper.GameState do
     end)
   end
 
-  def take_notifications(game) do
-    {Notification.collate_notifications(game.notifications), struct(game, notifications: [])}
+  defp take_notifications(game) do
+    # {Notification.collate_notifications(game.notifications), struct(game, notifications: [])}
+    {PubSubMessage.combine_msgs(game.notifications), struct(game, notifications: [])}
   end
 
   defp add_notification(game, to, msg) do
-    %__MODULE__{game | notifications: [Notification.build(to, msg) | game.notifications]}
+    #%__MODULE__{game | notifications: [Notification.build(to, msg) | game.notifications]}
+    %__MODULE__{game | notifications: [PubSubMessage.build(to, msg) | game.notifications]}
   end
 
   defp add_sync_notification(game, to, msg) do
-    %__MODULE__{game | notifications: [Notification.build(to, msg, :sync) | game.notifications]}
+    %__MODULE__{game | notifications: [PubSubMessage.build(to, msg, :sync) | game.notifications]}
   end
 
   @impl true

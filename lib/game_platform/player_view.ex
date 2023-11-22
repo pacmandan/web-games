@@ -1,8 +1,10 @@
 defmodule GamePlatform.PlayerView do
   # TODO: Figure out a way to do this without WebGamesWeb?
+  require OpenTelemetry.Tracer, as: Tracer
   use WebGamesWeb, :live_view
 
   alias GamePlatform.Game
+  alias GamePlatform.PubSubMessage
 
   def mount(%{"game_id" => game_id} = _params, %{"player_id" => player_id} = _session, socket) do
     socket = socket
@@ -68,13 +70,13 @@ defmodule GamePlatform.PlayerView do
       socket
       |> monitor_game()
       |> connect_player()
-      |> schedule_reconnect_attempt(attempts)
     else
       socket
       |> put_flash(:error, "Game server has crashed")
       |> assign(:connection_state, :server_down)
-      |> schedule_reconnect_attempt(attempts)
     end
+    |> schedule_reconnect_attempt(attempts)
+
     {:noreply, socket}
   end
 
@@ -92,22 +94,27 @@ defmodule GamePlatform.PlayerView do
     {:noreply, socket}
   end
 
-  def handle_info({:game_event, _game_id, msgs}, socket) when socket.assigns.connection_state == :synced do
-    socket = socket.assigns.game_view_module.handle_game_event(socket, msgs)
-    {:noreply, socket}
+  def handle_info(%PubSubMessage{type: :game_event, payload: payload, ctx: ctx}, socket) when socket.assigns.connection_state == :synced do
+    Tracer.with_span :game_event_view, span_opts(socket, ctx) do
+      socket = socket.assigns.game_view_module.handle_game_event(socket, payload)
+      {:noreply, socket}
+    end
   end
 
-  def handle_info({:game_event, _, _}, socket) do
+  def handle_info(%PubSubMessage{type: :game_event}, socket) do
     # Ignore all messages until we've synced.
     {:noreply, socket}
   end
 
-  def handle_info({:sync, _game_id, msgs}, socket) do
-    socket = socket
-    |> handle_sync()
-    |> socket.assigns.game_view_module.handle_sync(msgs)
+  def handle_info(%PubSubMessage{type: :sync, payload: payload, ctx: ctx}, socket) do
+    Tracer.with_span ctx, :sync_view, span_opts(socket, ctx) do
+      socket = socket
+      |> cancel_reconnect_timer()
+      |> assign(:connection_state, :synced)
+      |> socket.assigns.game_view_module.handle_sync(payload)
 
-    {:noreply, socket}
+      {:noreply, socket}
+    end
   end
 
   def handle_info(payload, socket) do
@@ -116,8 +123,10 @@ defmodule GamePlatform.PlayerView do
   end
 
   def handle_event(event, unsigned_params, socket) do
-    # Delegate handle_event to the implementation module
-    socket.assigns.game_view_module.handle_event(event, unsigned_params, socket)
+    Tracer.with_span :view_handle_event, span_opts(socket) do
+      # Delegate handle_event to the implementation module
+      socket.assigns.game_view_module.handle_event(event, unsigned_params, socket)
+    end
   end
 
   def render(%{connection_state: :loading} = assigns) do
@@ -141,8 +150,44 @@ defmodule GamePlatform.PlayerView do
   end
 
   def render(assigns) do
-    # Delegate render to the implementation module
-    assigns.game_view_module.render(assigns)
+    Tracer.with_span :render, span_opts(assigns) do
+      # Delegate render to the implementation module
+      assigns.game_view_module.render(assigns)
+    end
+  end
+
+  defp span_opts(%Phoenix.LiveView.Socket{} = socket) do
+    %{
+      attributes: [
+        {:game_id, socket.assigns.game_id},
+        {:player_id, socket.assigns.player_id},
+        {:module, __MODULE__},
+        {:game_module, socket.assigns.game_view_module},
+      ]
+    }
+  end
+
+  defp span_opts(assigns) do
+    %{
+      attributes: [
+        {:game_id, assigns.game_id},
+        {:player_id, assigns.player_id},
+        {:module, __MODULE__},
+        {:game_module, assigns.game_view_module},
+      ]
+    }
+  end
+
+  defp span_opts(%Phoenix.LiveView.Socket{} = socket, ctx) do
+    %{
+      attributes: [
+        {:game_id, socket.assigns.game_id},
+        {:player_id, socket.assigns.player_id},
+        {:module, __MODULE__},
+        {:game_module, socket.assigns.game_view_module},
+      ],
+      links: [OpenTelemetry.link(ctx)]
+    }
   end
 
   defp monitor_game(socket) when not (socket.assigns.game_id |> is_nil()) do
@@ -155,12 +200,6 @@ defmodule GamePlatform.PlayerView do
   defp connect_player(%{assigns: %{game_id: game_id, player_id: player_id}} = socket) do
     Game.player_connected(player_id, game_id, self())
     assign(socket, :connection_state, :waiting_for_sync)
-  end
-
-  defp handle_sync(socket) do
-    socket
-    |> cancel_reconnect_timer()
-    |> assign(:connection_state, :synced)
   end
 
   defp cancel_reconnect_timer(socket) do

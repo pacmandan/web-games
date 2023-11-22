@@ -1,6 +1,7 @@
 defmodule WebGamesWeb.Minesweeper.PlayerState do
   use GamePlatform.PlayerState
 
+  require OpenTelemetry.Tracer
   alias GamePlatform.Game
 
   @assigns_keys [
@@ -32,17 +33,23 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
   end
 
   @impl true
-  def handle_sync(socket, msgs) do
-    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), &process_event/2)
+  def handle_sync(socket, payload) do
+    new_assigns = payload
+    |> List.wrap()
+    |> Enum.reduce(Map.take(socket.assigns, @assigns_keys), &process_event/2)
 
     assign(socket, new_assigns)
   end
 
   @impl true
-  def handle_game_event(socket, msgs) do
-    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), &process_event/2)
+  def handle_game_event(socket, payload) do
+    OpenTelemetry.Tracer.with_span :minesweeper_view_event, %{} do
+      new_assigns = payload
+      |> List.wrap()
+      |> Enum.reduce(Map.take(socket.assigns, @assigns_keys), &process_event/2)
 
-    assign(socket, new_assigns)
+      assign(socket, new_assigns)
+    end
   end
 
   defp process_event({:click, cells}, %{grid: grid} = assigns) do

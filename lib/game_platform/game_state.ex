@@ -6,6 +6,7 @@ defmodule GamePlatform.GameState do
   @type game_state :: term()
 
   @type notifications :: list(term())
+  @type msgs :: [GamePlatform.PubSubMessage.t()]
 
   @type player_id :: String.t()
 
@@ -32,13 +33,13 @@ defmodule GamePlatform.GameState do
   If trying to add a player that already exists, return successfully as if they were just added.
   """
   @callback join_game(game_state(), player_id()) ::
-    {:ok, list(pubsub_topic()), notifications(), game_state()}
+    {:ok, list(pubsub_topic()), msgs(), game_state()}
 
   @doc """
   Removes a player from the state. Typically called by the server whenever a player has disconnected and timed out.
   """
   @callback leave_game(game_state(), player_id()) ::
-    {:ok, notifications(), game_state()}
+    {:ok, msgs(), game_state()}
 
   @doc """
   Tells the state that a particular player is connected and ready to recieve events.
@@ -46,7 +47,7 @@ defmodule GamePlatform.GameState do
   This should return a notification to that player to allow them to initialize their state.
   """
   @callback player_connected(game_state(), player_id()) ::
-    {:ok, notifications(), game_state()}
+    {:ok, msgs(), game_state()}
 
   @doc """
   Called whenever a player socket process stops, crashes, or is otherwise refreshed.
@@ -55,19 +56,19 @@ defmodule GamePlatform.GameState do
   then `leave_game` will be called.
   """
   @callback player_disconnected(game_state(), player_id()) ::
-    {:ok, notifications(), game_state()}
+    {:ok, msgs(), game_state()}
 
   @doc """
   The primary workhorse of the game state logic. Players will send events to the server,
-  and this modifies the game state and sends notifications to connected players about those changes.
+  and this modifies the game state and sends msgs to connected players about those changes.
   """
   @callback handle_event(game_state(), from :: player_id() | :game, event :: term()) ::
-  {:ok, notifications(), game_state()}
+  {:ok, msgs(), game_state()}
 
   @doc """
   The game server is about to shut down. Handle any last minute tasks before this happens.
   """
-  @callback handle_game_shutdown(game_state()) :: {:ok, notifications(), game_state()}
+  @callback handle_game_shutdown(game_state()) :: {:ok, msgs(), game_state()}
 
   defmacro __using__(opts) do
     %{view_module: view_module} = Enum.into(opts, %{})
