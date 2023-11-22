@@ -1,6 +1,7 @@
 defmodule WebGames.LightCycles.GameState do
-  alias GamePlatform.Notification
+  # alias GamePlatform.Notification
   alias GamePlatform.GameServer
+  alias GamePlatform.PubSubMessage
 
   use GamePlatform.GameState, view_module: WebGamesWeb.LightCycles.PlayerState
 
@@ -93,7 +94,7 @@ defmodule WebGames.LightCycles.GameState do
 
         new_state = add_player(game_state, player_id)
 
-        n = Notification.build(:all, {:player_added, new_state.players[player_id].config})
+        n = PubSubMessage.build(:all, {:player_added, new_state.players[player_id].config})
 
         {:ok, player_topics(player_id), [n], new_state}
 
@@ -146,8 +147,8 @@ defmodule WebGames.LightCycles.GameState do
       nil -> {:ok, [], game_state}
       _player_state ->
         n = [
-          Notification.build(:all, {:player_connected, player_id}),
-          Notification.build({:player, player_id}, {:sync, display_state(game_state)}, :sync)
+          PubSubMessage.build(:all, {:player_connected, player_id}),
+          PubSubMessage.build({:player, player_id}, {:sync, display_state(game_state)}, :sync)
         ]
 
         {:ok, n, game_state}
@@ -161,7 +162,7 @@ defmodule WebGames.LightCycles.GameState do
   @impl true
   def player_disconnected(%__MODULE__{} = game_state, player_id) do
     if game_state.players[player_id] do
-      n = Notification.build(:all, {:player_disconnected, player_id})
+      n = PubSubMessage.build(:all, {:player_disconnected, player_id})
       {:ok, [n], game_state}
     else
       {:ok, [], game_state}
@@ -183,7 +184,7 @@ defmodule WebGames.LightCycles.GameState do
       new_config = Map.merge(current_config, opts)
       new_state = put_in(game_state, [:players, player_id, :config], new_config)
 
-      n = Notification.build(:all, {:player_config_change, player_id, new_config})
+      n = PubSubMessage.build(:all, {:player_config_change, player_id, new_config})
 
       {:ok, [n], new_state}
     else
@@ -222,7 +223,7 @@ defmodule WebGames.LightCycles.GameState do
     |> Map.replace(:current_state, :ready)
 
     schedule_countdown()
-    {:ok, [Notification.build(:all, :start_countdown)], new_state}
+    {:ok, [PubSubMessage.build(:all, :start_countdown)], new_state}
   end
 
   def handle_event(game_state, _, :start_game), do: {:ok, [], game_state}
@@ -230,16 +231,16 @@ defmodule WebGames.LightCycles.GameState do
   def handle_event(%__MODULE__{current_state: :ready} = game_state, :game, {:countdown, n}) do
     case n do
       3 ->
-        {:ok, [Notification.build(:all, {:countdown, 3})], game_state}
+        {:ok, [PubSubMessage.build(:all, {:countdown, 3})], game_state}
       2 ->
-        {:ok, [Notification.build(:all, {:countdown, 2})], game_state}
+        {:ok, [PubSubMessage.build(:all, {:countdown, 2})], game_state}
       1 ->
-        {:ok, [Notification.build(:all, {:countdown, 1})], game_state}
+        {:ok, [PubSubMessage.build(:all, {:countdown, 1})], game_state}
       0 ->
         new_state = game_state
         |> start_game()
 
-        {:ok, [Notification.build(:all, :start_game)], new_state}
+        {:ok, [PubSubMessage.build(:all, :start_game)], new_state}
       _ ->
         {:error, :invalid_countdown}
     end
@@ -330,11 +331,12 @@ defmodule WebGames.LightCycles.GameState do
 
   def handle_event(game_state, _, {:turn, _, _}), do: {:ok, [], game_state}
 
-  @impl true
-  def handle_game_shutdown(game_state) do
-    n = Notification.build(:all, :end_game)
-    {:ok, [n], pause_game(game_state)}
-  end
+  # @impl true
+  # def handle_game_shutdown(game_state) do
+  #   # n = Notification.build(:all, :end_game)
+  #   n = PubSubMessage.build(:all, :end_game)
+  #   {:ok, [n], pause_game(game_state)}
+  # end
 
   defp check_players_ready(game_state) do
     if all_players_ready?(game_state) do
@@ -403,11 +405,13 @@ defmodule WebGames.LightCycles.GameState do
   defp get_player_facing(%{turns: [{_, facing} | _]}), do: facing
 
   defp take_notifications(game) do
-    {Notification.collate_notifications(game.notifications), struct(game, notifications: [])}
+    # {Notification.collate_notifications(game.notifications), struct(game, notifications: [])}
+    {PubSubMessage.combine_msgs(game.notifications), struct(game, notifications: [])}
   end
 
   defp add_notification(game, to, msg) do
-    %__MODULE__{game | notifications: [Notification.build(to, msg) | game.notifications]}
+    #%__MODULE__{game | notifications: [Notification.build(to, msg) | game.notifications]}
+    %__MODULE__{game | notifications: [PubSubMessage.build(to, msg) | game.notifications]}
   end
 
   defp generate_blank_grid(width, height) do

@@ -13,6 +13,8 @@ services:
       - METRICS_TYPE=statsd
       - METRICS_STATSD_HOST=otel
       - METRICS_STATSD_PORT=8127
+      - TRACES_EXPORTER=otlp
+      - TRACES_OTLP_ENDPOINT=http://otel:4318
     volumes:
       - type: volume
         source: build_vol

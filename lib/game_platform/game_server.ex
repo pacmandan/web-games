@@ -2,7 +2,29 @@ defmodule GamePlatform.GameServer do
   @moduledoc """
   Generic game server that runs game implementations.
   """
-  alias GamePlatform.Notification
+
+  defmodule GameMessage do
+    defstruct [
+      :action,
+      :payload,
+      :from,
+      :ctx,
+    ]
+
+    @type action ::
+      :player_join
+      | :player_connected
+      | :game_event
+
+    @type t :: %__MODULE__{
+      action: action(),
+      payload: term(),
+      ctx: OpenTelemetry.Ctx.t(),
+    }
+  end
+
+  alias GamePlatform.PubSubMessage
+  # alias GamePlatform.Notification
   use GenServer, restart: :transient
 
   require Logger
@@ -82,7 +104,7 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_continue(:init_game, state) do
-    Tracer.with_span :init_game, %{attributes: span_attributes(state)} do
+    Tracer.with_span :init_game, span_opts(state) do
       # TODO: Handle error in game state init
       # Initialize the game state using the provided "game_config".
       {:ok, game_state} = state.game_module.init(state.game_config)
@@ -98,19 +120,19 @@ defmodule GamePlatform.GameServer do
   end
 
   @impl true
-  def handle_call({:join_game, player_id}, _from, state) do
-    attrs = span_attributes(state) ++ [{:player_id, player_id}]
-    Tracer.with_span :join_game, %{attributes: attrs} do
+  def handle_call(%GameMessage{action: :player_join} = msg, _from, state) do
+    Tracer.with_span :join_game, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
       # Tell the game server a player is attempting to join.
-      case state.game_module.join_game(state.game_state, player_id) do
+      case state.game_module.join_game(state.game_state, msg.from) do
         # A player joined the state, tell everyone about it.
         {:ok, topic_refs, notifications, new_game_state} ->
-          send_notifications(notifications, state)
+          # send_notifications(notifications, state)
+          broadcast_pubsub(notifications, state)
           # TODO: Should we cache these in the server state? (per-player?)
           # TODO: Send the topic refs instead of the topics
           # The "subscribe" function should live in the Notification module,
           # and should automatically translate refs to topic strings.
-          topics = Enum.map(topic_refs, &(Notification.get_topic(&1, state.game_id)))
+          topics = Enum.map(topic_refs, &(PubSubMessage.get_topic(&1, state.game_id)))
 
           new_state = state
           |> Map.put(:game_state, new_game_state)
@@ -129,35 +151,34 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_call(:game_type, _from, state) do
-    Tracer.with_span :game_type, %{attributes: span_attributes(state)} do
+    Tracer.with_span :game_type, span_opts(state) do
       # Return the game module this server is running.
       {:reply, {:ok, state.game_module, state.game_module.game_view_module()}, state}
     end
   end
 
-  @impl true
-  def handle_cast({:leave_game, player_id}, state) do
-    attrs = span_attributes(state) ++ [{:player_id, player_id}]
-    Tracer.with_span :leave_game, %{attributes: attrs} do
-      do_remove_player(player_id, state)
-    end
-  end
+  # @impl true
+  # def handle_cast({:leave_game, player_id, ctx}, state) do
+  #   Tracer.with_span :leave_game, span_opts(state, [{:player_id, player_id}], ctx) do
+  #     do_remove_player(player_id, state)
+  #   end
+  # end
 
   @impl true
-  def handle_cast({:game_event, from, event}, state) do
+  def handle_cast(%GameMessage{action: :game_event} = msg, state) do
     # Not sure if "event" should be included here?
     # Maybe that should be up to the implementation to add?
-    attrs = span_attributes(state) ++ [{:player_id, from}, {:event, event |> inspect()}]
-    Tracer.with_span :game_event, %{attributes: attrs} do
+    Tracer.with_span :game_event, span_opts(state, [{:player_id, msg.from}, {:event, msg.payload |> inspect()}], msg.ctx) do
       # Only handle events from connected players.
-      with true <- MapSet.member?(state.connected_player_ids, from),
-        {:ok, notifications, new_game_state} <- state.game_module.handle_event(state.game_state, from, event)
+      with true <- MapSet.member?(state.connected_player_ids, msg.from),
+        {:ok, notifications, new_game_state} <- state.game_module.handle_event(state.game_state, msg.from, msg.payload)
       do
         new_state = state
         |> Map.replace(:game_state, new_game_state)
         |> schedule_game_timeout()
 
-        send_notifications(notifications, state)
+        # send_notifications(notifications, state)
+        broadcast_pubsub(notifications, state)
 
         {:noreply, new_state}
       else
@@ -170,22 +191,22 @@ defmodule GamePlatform.GameServer do
   end
 
   @impl true
-  def handle_cast({:player_connected, player_id, pid}, state) do
-    attrs = span_attributes(state) ++ [{:player_id, player_id}]
-    Tracer.with_span :player_connected, %{attributes: attrs} do
+  def handle_cast(%GameMessage{action: :player_connected} = msg, state) do
+    Tracer.with_span :player_connected, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
       # Just in case this is a previously disconnected player,
       # cancel their timeout.
-      state = state |> cancel_player_timeout(player_id)
+      state = state |> cancel_player_timeout(msg.from)
 
-      case state.game_module.player_connected(state.game_state, player_id) do
+      case state.game_module.player_connected(state.game_state, msg.from) do
         {:ok, notifications, new_game_state} ->
           # Monitor connected player to see if/when they disconnect
           new_state = state
-          |> Map.replace(:connected_player_monitors, Map.put(state.connected_player_monitors, Process.monitor(pid), player_id))
-          |> Map.replace(:connected_player_ids, MapSet.put(state.connected_player_ids, player_id))
+          |> Map.replace(:connected_player_monitors, Map.put(state.connected_player_monitors, Process.monitor(msg.payload[:pid]), msg.from))
+          |> Map.replace(:connected_player_ids, MapSet.put(state.connected_player_ids, msg.from))
           |> Map.replace(:game_state, new_game_state)
 
-          send_notifications(notifications, new_state)
+          # send_notifications(notifications, new_state)
+          broadcast_pubsub(notifications, state)
           {:noreply, new_state}
 
         {:error, _reason} ->
@@ -197,7 +218,7 @@ defmodule GamePlatform.GameServer do
   # This should be triggered by the monitors on connected players.
   @impl true
   def handle_info({:DOWN, ref, :process, _object, _reason}, state) do
-    Tracer.with_span :player_disconnected, %{attributes: span_attributes(state)} do
+    Tracer.with_span :player_disconnected, span_opts(state) do
       # Oh no! A player has disconnected!
       # Pop their monitor from connected players.
       {player_id, connected_player_monitors} = Map.pop(state.connected_player_monitors, ref)
@@ -221,7 +242,8 @@ defmodule GamePlatform.GameServer do
             new_state = state
             |> Map.replace(:game_state, new_game_state)
 
-            send_notifications(notifications, new_state)
+            # send_notifications(notifications, new_state)
+            broadcast_pubsub(notifications, state)
             {:noreply, new_state}
 
           {:error, _reason} ->
@@ -232,7 +254,7 @@ defmodule GamePlatform.GameServer do
     end
   end
 
-  # Internal events, triggered via Process.send_after(self()) within the Game.schedule_event().
+  # Internal events, triggered via Process.send_after(self()) within the schedule_event().
   # Essentially this is handle_cast({:game_event, :game, event}, state), if :game were a legal value in that call.
   @impl true
   def handle_info({:game_event, event}, state) do
@@ -248,7 +270,8 @@ defmodule GamePlatform.GameServer do
         |> Map.replace(:game_state, new_game_state)
         # |> Map.replace(:timeout_ref, new_timeout_ref)
 
-        send_notifications(notifications, new_state)
+        # send_notifications(notifications, new_state)
+        broadcast_pubsub(notifications, state)
 
         {:noreply, new_state}
 
@@ -260,35 +283,30 @@ defmodule GamePlatform.GameServer do
 
   # This is the primary way the game-specific module can communicate with this module.
   # Sending a message to itself with {:server_event, event}.
-  def handle_info({:server_event, event}, state) do
-    handle_server_event(event, state)
-  end
 
   # :end_game and :game_timeout are functionally identical
   # However, they are semantically different.
   # :end_game is called from within the game state - the game itself has determined that it is over.
   # :game_timeout happens at the server level, and represents an idle timeout where nothing has happened.
-  defp handle_server_event(:end_game, state) do
-    attrs = span_attributes(state) ++ [{:reason, "end_game"}]
-    Tracer.with_span :end_game, %{attributes: attrs} do
+
+  def handle_info({:server_event, :end_game}, state) do
+    Tracer.with_span :end_game, span_opts(state, [{:reason, "end_game"}]) do
       Logger.info("Game #{state.game_id} has ended normally")
       # emit_game_stop(state, :normal)
       halt_game(state)
     end
   end
 
-  defp handle_server_event(:game_timeout, state) do
-    attrs = span_attributes(state) ++ [{:reason, "game_timeout"}]
-    Tracer.with_span :end_game, %{attributes: attrs} do
+  def handle_info({:server_event, :game_timeout}, state) do
+    Tracer.with_span :end_game, span_opts(state, [{:reason, "game_timeout"}]) do
       Logger.info("Game #{state.game_id} has timed out due to inactivity")
       # emit_game_stop(state, :game_timeout)
       halt_game(state)
     end
   end
 
-  defp handle_server_event({:player_disconnect_timeout, player_id}, state) do
-    attrs = span_attributes(state) ++ [{:player_id, player_id}]
-    Tracer.with_span :player_disconnect_timeout, %{attributes: attrs} do
+  def handle_info({:server_event, {:player_disconnect_timeout, player_id}}, state) do
+    Tracer.with_span :player_disconnect_timeout, span_opts(state, [{:player_id, player_id}]) do
       do_remove_player(player_id, state)
     end
   end
@@ -300,7 +318,11 @@ defmodule GamePlatform.GameServer do
     |> Map.replace(:game_state, new_game_state)
 
     # TODO: Add a server-level notification (somehow)?
-    send_notifications(notifications, new_state)
+    # We'd need to know what topics to send to.
+    # So we'd either need a "universal" channel outside of what the
+    # game uses, or keep track of the channels the game uses.
+    # send_notifications(notifications, new_state)
+    broadcast_pubsub(notifications, state)
     {:stop, :normal, new_state}
   end
 
@@ -324,7 +346,8 @@ defmodule GamePlatform.GameServer do
     # Tell the game state that this player is leaving.
     case state.game_module.leave_game(new_state.game_state, player_id) do
       {:ok, notifications, new_game_state} ->
-        send_notifications(notifications, new_state)
+        broadcast_pubsub(notifications, state)
+        # send_notifications(notifications, new_state)
 
         {:noreply, %{new_state | game_state: new_game_state}}
       {:error, _reason} ->
@@ -332,9 +355,14 @@ defmodule GamePlatform.GameServer do
     end
   end
 
-  defp send_notifications([], _), do: :ok
-  defp send_notifications(notifications, state) do
-    Notification.send_all(notifications, state.game_id, state.server_config.pubsub)
+  # defp send_notifications([], _), do: :ok
+  # defp send_notifications(notifications, state) do
+  #   Notification.send_all(notifications, state.game_id, state.server_config.pubsub)
+  # end
+
+  defp broadcast_pubsub([], _), do: :ok
+  defp broadcast_pubsub(msgs, state) do
+    PubSubMessage.broadcast_all(msgs, state.game_id, state.server_config.pubsub)
   end
 
   # This should be called when a player has disconnected.
@@ -356,11 +384,23 @@ defmodule GamePlatform.GameServer do
     |> put_in([:player_timeout_refs, player_id], timer_ref)
   end
 
-  defp span_attributes(state) do
-    [
-      {:game_id, state.game_id},
-      {:game_module, state.game_module},
-    ]
+  defp span_opts(state, extra_attrs \\ []) do
+    %{
+      attributes: [
+        {:game_id, state.game_id},
+        {:game_module, state.game_module},
+      ] ++ extra_attrs,
+    }
+  end
+
+  defp span_opts(state, extra_attrs, ctx) do
+    %{
+      attributes: [
+        {:game_id, state.game_id},
+        {:game_module, state.game_module},
+      ] ++ extra_attrs,
+      links: [OpenTelemetry.link(ctx)]
+    }
   end
 
   # Cancels the players disconnect timeout, usually because that player has reconnected.

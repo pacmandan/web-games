@@ -1,18 +1,37 @@
 defmodule GamePlatform.Game do
   alias GamePlatform.GameRegistry
   alias GamePlatform.GameServer
+  alias GamePlatform.GameServer.GameMessage
 
   def join_game(player_id, game_id) do
-    GenServer.call(GameServer.via_tuple(game_id), {:join_game, player_id})
+    msg = %GameMessage{
+      action: :player_join,
+      from: player_id,
+      ctx: OpenTelemetry.Tracer.current_span_ctx(),
+    }
+    GenServer.call(GameServer.via_tuple(game_id), msg)
   end
 
   def send_event(event, from, game_id) do
-    # TODO: Add span context
-    GenServer.cast(GameServer.via_tuple(game_id), {:game_event, from, event})
+    msg = %GameMessage{
+      action: :game_event,
+      from: from,
+      payload: event,
+      ctx: OpenTelemetry.Tracer.current_span_ctx(),
+    }
+    GenServer.cast(GameServer.via_tuple(game_id), msg)
   end
 
   def player_connected(player_id, game_id, pid) do
-    GenServer.cast(GameServer.via_tuple(game_id), {:player_connected, player_id, pid})
+    msg = %GameMessage{
+      action: :player_connected,
+      from: player_id,
+      payload: %{
+        pid: pid,
+      },
+      ctx: OpenTelemetry.Tracer.current_span_ctx(),
+    }
+    GenServer.cast(GameServer.via_tuple(game_id), msg)
   end
 
   def get_game_type(game_id) do

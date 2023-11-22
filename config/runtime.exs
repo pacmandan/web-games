@@ -32,12 +32,18 @@ config :web_games, :telemetry_statsd,
   port: System.get_env("METRICS_STATSD_PORT", "8125") |> String.to_integer(),
   socket: System.get_env("METRICS_STATSD_SOCKET")
 
+traces_exporter = case System.get_env("TRACES_EXPORTER", "none") |> String.downcase() do
+  "none" -> :none
+  "otlp" -> :otlp
+  _ -> :none
+end
+
 config :opentelemetry,
-  traces_exporter: :otlp
+  traces_exporter: traces_exporter
 
 config :opentelemetry_exporter,
   otlp_protocol: :http_protobuf,
-  otlp_endpoint: "http://otel:4318"
+  otlp_endpoint: System.get_env("TRACES_OTLP_ENDPOINT", "http://localhost:4318")
 
 
 if config_env() == :prod do
