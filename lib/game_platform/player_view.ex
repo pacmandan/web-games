@@ -57,7 +57,7 @@ defmodule GamePlatform.PlayerView do
     end
   end
 
-  def handle_info({:try_reconnect, attempts}, socket) when attempts >= 30 do
+  def handle_info({:try_reconnect, attempts}, socket) when attempts >= 5 do
     socket = socket
     |> put_flash(:error, "Could not reconnect to server")
     |> redirect(to: "/select-game")
@@ -80,11 +80,11 @@ defmodule GamePlatform.PlayerView do
     {:noreply, socket}
   end
 
-  def handle_info({:DOWN, ref, :process, _object, _reason}, socket) when socket.assigns.game_monitor == ref do
+  def handle_info({:DOWN, ref, :process, _object, reason}, socket) when socket.assigns.game_monitor == ref do
     socket = socket
     |> assign(:connection_state, :server_down)
     |> schedule_reconnect_attempt()
-    |> socket.assigns.game_view_module.handle_game_crash()
+    |> socket.assigns.game_view_module.handle_game_crash(reason)
 
     {:noreply, socket}
   end
@@ -95,7 +95,7 @@ defmodule GamePlatform.PlayerView do
   end
 
   def handle_info(%PubSubMessage{type: :game_event, payload: payload, ctx: ctx}, socket) when socket.assigns.connection_state == :synced do
-    Tracer.with_span :game_event_view, span_opts(socket, ctx) do
+    Tracer.with_span :pv_handle_game_event, span_opts(socket, ctx) do
       socket = socket.assigns.game_view_module.handle_game_event(socket, payload)
       {:noreply, socket}
     end
@@ -107,7 +107,7 @@ defmodule GamePlatform.PlayerView do
   end
 
   def handle_info(%PubSubMessage{type: :sync, payload: payload, ctx: ctx}, socket) do
-    Tracer.with_span ctx, :sync_view, span_opts(socket, ctx) do
+    Tracer.with_span ctx, :pv_handle_sync, span_opts(socket, ctx) do
       socket = socket
       |> cancel_reconnect_timer()
       |> assign(:connection_state, :synced)
@@ -117,13 +117,13 @@ defmodule GamePlatform.PlayerView do
     end
   end
 
-  def handle_info(payload, socket) do
+  def handle_info(msg, socket) do
     # Delegate all other "handle_info"s to the implementation module.
-    socket.assigns.game_view_module.handle_info(payload, socket)
+    socket.assigns.game_view_module.handle_info(msg, socket)
   end
 
   def handle_event(event, unsigned_params, socket) do
-    Tracer.with_span :view_handle_event, span_opts(socket) do
+    Tracer.with_span :pv_handle_event, span_opts(socket) do
       # Delegate handle_event to the implementation module
       socket.assigns.game_view_module.handle_event(event, unsigned_params, socket)
     end
@@ -150,7 +150,7 @@ defmodule GamePlatform.PlayerView do
   end
 
   def render(assigns) do
-    Tracer.with_span :render, span_opts(assigns) do
+    Tracer.with_span :pv_render, span_opts(assigns) do
       # Delegate render to the implementation module
       assigns.game_view_module.render(assigns)
     end

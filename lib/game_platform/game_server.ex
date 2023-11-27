@@ -104,7 +104,7 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_continue(:init_game, state) do
-    Tracer.with_span :init_game, span_opts(state) do
+    Tracer.with_span :gs_init_game, span_opts(state) do
       # TODO: Handle error in game state init
       # Initialize the game state using the provided "game_config".
       {:ok, game_state} = state.game_module.init(state.game_config)
@@ -121,7 +121,7 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_call(%GameMessage{action: :player_join} = msg, _from, state) do
-    Tracer.with_span :join_game, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
+    Tracer.with_span :gs_join_game, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
       # Tell the game server a player is attempting to join.
       case state.game_module.join_game(state.game_state, msg.from) do
         # A player joined the state, tell everyone about it.
@@ -151,7 +151,7 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_call(:game_type, _from, state) do
-    Tracer.with_span :game_type, span_opts(state) do
+    Tracer.with_span :gs_game_type, span_opts(state) do
       # Return the game module this server is running.
       {:reply, {:ok, state.game_module, state.game_module.game_view_module()}, state}
     end
@@ -168,7 +168,7 @@ defmodule GamePlatform.GameServer do
   def handle_cast(%GameMessage{action: :game_event} = msg, state) do
     # Not sure if "event" should be included here?
     # Maybe that should be up to the implementation to add?
-    Tracer.with_span :game_event, span_opts(state, [{:player_id, msg.from}, {:event, msg.payload |> inspect()}], msg.ctx) do
+    Tracer.with_span :gs_game_event, span_opts(state, [{:player_id, msg.from}, {:event, msg.payload |> inspect()}], msg.ctx) do
       # Only handle events from connected players.
       with true <- MapSet.member?(state.connected_player_ids, msg.from),
         {:ok, notifications, new_game_state} <- state.game_module.handle_event(state.game_state, msg.from, msg.payload)
@@ -192,7 +192,7 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_cast(%GameMessage{action: :player_connected} = msg, state) do
-    Tracer.with_span :player_connected, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
+    Tracer.with_span :gs_player_connected, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
       # Just in case this is a previously disconnected player,
       # cancel their timeout.
       state = state |> cancel_player_timeout(msg.from)
@@ -218,7 +218,7 @@ defmodule GamePlatform.GameServer do
   # This should be triggered by the monitors on connected players.
   @impl true
   def handle_info({:DOWN, ref, :process, _object, _reason}, state) do
-    Tracer.with_span :player_disconnected, span_opts(state) do
+    Tracer.with_span :gs_player_disconnected, span_opts(state) do
       # Oh no! A player has disconnected!
       # Pop their monitor from connected players.
       {player_id, connected_player_monitors} = Map.pop(state.connected_player_monitors, ref)
@@ -290,7 +290,7 @@ defmodule GamePlatform.GameServer do
   # :game_timeout happens at the server level, and represents an idle timeout where nothing has happened.
 
   def handle_info({:server_event, :end_game}, state) do
-    Tracer.with_span :end_game, span_opts(state, [{:reason, "end_game"}]) do
+    Tracer.with_span :gs_end_game, span_opts(state, [{:reason, "end_game"}]) do
       Logger.info("Game #{state.game_id} has ended normally")
       # emit_game_stop(state, :normal)
       halt_game(state)
@@ -298,7 +298,7 @@ defmodule GamePlatform.GameServer do
   end
 
   def handle_info({:server_event, :game_timeout}, state) do
-    Tracer.with_span :end_game, span_opts(state, [{:reason, "game_timeout"}]) do
+    Tracer.with_span :gs_end_game, span_opts(state, [{:reason, "game_timeout"}]) do
       Logger.info("Game #{state.game_id} has timed out due to inactivity")
       # emit_game_stop(state, :game_timeout)
       halt_game(state)
@@ -306,7 +306,7 @@ defmodule GamePlatform.GameServer do
   end
 
   def handle_info({:server_event, {:player_disconnect_timeout, player_id}}, state) do
-    Tracer.with_span :player_disconnect_timeout, span_opts(state, [{:player_id, player_id}]) do
+    Tracer.with_span :gs_player_disconnect_timeout, span_opts(state, [{:player_id, player_id}]) do
       do_remove_player(player_id, state)
     end
   end

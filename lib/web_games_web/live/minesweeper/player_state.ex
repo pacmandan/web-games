@@ -34,25 +34,27 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
 
   @impl true
   def handle_sync(socket, payload) do
-    new_assigns = payload
-    |> List.wrap()
-    |> Enum.reduce(Map.take(socket.assigns, @assigns_keys), &process_event/2)
-
-    assign(socket, new_assigns)
+    OpenTelemetry.Tracer.with_span :minesweeper_handle_sync, %{} do
+      process_payload(socket, payload)
+    end
   end
 
   @impl true
   def handle_game_event(socket, payload) do
-    OpenTelemetry.Tracer.with_span :minesweeper_view_event, %{} do
-      new_assigns = payload
-      |> List.wrap()
-      |> Enum.reduce(Map.take(socket.assigns, @assigns_keys), &process_event/2)
-
-      assign(socket, new_assigns)
+    OpenTelemetry.Tracer.with_span :minesweeper_handle_game_event, %{} do
+      process_payload(socket, payload)
     end
   end
 
-  defp process_event({:click, cells}, %{grid: grid} = assigns) do
+  defp process_payload(socket, payload) do
+    new_assigns = payload
+    |> List.wrap()
+    |> Enum.reduce(Map.take(socket.assigns, @assigns_keys), &process_msg/2)
+
+    assign(socket, new_assigns)
+  end
+
+  defp process_msg({:click, cells}, %{grid: grid} = assigns) do
     new_grid = Enum.into(cells, grid, fn {coord, clicked?} ->
       {coord, %{grid[coord] | clicked?: clicked?}}
     end)
@@ -62,7 +64,7 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_event({:open, cells}, %{grid: grid} = assigns) do
+  defp process_msg({:open, cells}, %{grid: grid} = assigns) do
     new_grid = Enum.into(cells, grid, fn {coord, value} ->
       {coord, %{grid[coord] | value: value, opened?: true}}
     end)
@@ -72,7 +74,7 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_event({:flag, cells}, %{grid: grid} = assigns) do
+  defp process_msg({:flag, cells}, %{grid: grid} = assigns) do
     new_grid = Enum.into(cells, grid, fn {coord, flagged?} ->
       {coord, %{grid[coord] | flagged?: flagged?}}
     end)
@@ -82,26 +84,26 @@ defmodule WebGamesWeb.Minesweeper.PlayerState do
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_event({:game_over, :lose}, assigns) do
+  defp process_msg({:game_over, :lose}, assigns) do
     assigns
     |> Map.put(:status, :lose)
     |> Map.put(:clicks_enabled?, false)
     |> render_full_grid()
   end
 
-  defp process_event({:game_over, :win}, assigns) do
+  defp process_msg({:game_over, :win}, assigns) do
     assigns
     |> Map.put(:status, :win)
     |> Map.put(:clicks_enabled?, false)
     |> render_full_grid()
   end
 
-  defp process_event({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status}}, assigns) do
+  defp process_msg({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status}}, assigns) do
     Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n, status: status})
     |> render_full_grid()
   end
 
-  defp process_event({:show_mines, coord_list}, %{grid: grid} = assigns) do
+  defp process_msg({:show_mines, coord_list}, %{grid: grid} = assigns) do
     new_grid = Enum.into(coord_list, grid, fn coord ->
       {coord, %{grid[coord] | has_mine?: true}}
     end)
