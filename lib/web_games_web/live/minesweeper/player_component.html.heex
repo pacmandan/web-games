@@ -1,0 +1,26 @@
+<div>
+  Game ID: <%= @game_id %><br/>
+  Player ID: <%= @player_id %><br/>
+  <div style={"display:grid; grid-template-columns:repeat(#{@width},32px); grid-template-rows:repeat(#{@height},32px);"} :if={!is_nil(@grid)} id="cell_grid" phx-update="append">
+    <%= for {{x,y}, cell} <- @display_grid do %>
+      <div style={"grid-column-start:#{x};grid-row-start:#{y}"} id={"cell_box_#{x}_#{y}"}>
+        <div class={"w-8 h-8 #{cell.background_color} #{cell.text_color} #{cell.border_color} border"}
+          phx-click={if @clicks_enabled?, do: "click", else: nil}
+          phx-target={@myself}
+          phx-hook="MinesweeperFlag"
+          phx-value-x={x}
+          phx-value-y={y}
+          id={"cell_click_#{x}_#{y}"}
+        >
+          <%= cell.value %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+  <br/>
+  <%= if @status in [:win, :lose] do %>
+    <%= @status %>
+  <% end %>
+</div>
+
+

@@ -28,7 +28,7 @@ Hooks.MinesweeperFlag = {
   mounted() {
     this.el.addEventListener("contextmenu", e => {
       e.preventDefault()
-      this.pushEvent("flag", {x: this.el.getAttribute("phx-value-x"), y: this.el.getAttribute("phx-value-y")}, (reply, ref) => {})
+      this.pushEventTo(this.el, "flag", {x: this.el.getAttribute("phx-value-x"), y: this.el.getAttribute("phx-value-y")}, (reply, ref) => {})
       return false;
     })
   }
