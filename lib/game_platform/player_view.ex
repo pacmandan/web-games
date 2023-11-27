@@ -19,13 +19,14 @@ defmodule GamePlatform.PlayerView do
         |> redirect(to: "/select-game")
         {:ok, socket}
       connected?(socket) ->
-        socket
+        socket = socket
         |> fetch_game_type()
         |> join_game()
         |> monitor_game()
         |> connect_player()
         |> schedule_reconnect_attempt()
-        |> init_view_module()
+
+        {:ok, socket}
       true ->
         {:ok, assign(socket, connection_state: :loading)}
     end
@@ -43,9 +44,9 @@ defmodule GamePlatform.PlayerView do
     assign(socket, :topics, topics)
   end
 
-  defp init_view_module(socket) do
-    socket.assigns.game_view_module.init(socket)
-  end
+  # defp init_view_module(socket) do
+  #   socket.assigns.game_view_module.init(socket)
+  # end
 
   defp fetch_game_type(socket) do
     if socket.assigns[:game_view_module] |> is_nil() do
@@ -80,11 +81,11 @@ defmodule GamePlatform.PlayerView do
     {:noreply, socket}
   end
 
-  def handle_info({:DOWN, ref, :process, _object, reason}, socket) when socket.assigns.game_monitor == ref do
+  def handle_info({:DOWN, ref, :process, _object, _reason}, socket) when socket.assigns.game_monitor == ref do
     socket = socket
     |> assign(:connection_state, :server_down)
     |> schedule_reconnect_attempt()
-    |> socket.assigns.game_view_module.handle_game_crash(reason)
+    # |> socket.assigns.game_view_module.handle_game_crash(reason)
 
     {:noreply, socket}
   end
@@ -96,7 +97,9 @@ defmodule GamePlatform.PlayerView do
 
   def handle_info(%PubSubMessage{type: :game_event, payload: payload, ctx: ctx}, socket) when socket.assigns.connection_state == :synced do
     Tracer.with_span :pv_handle_game_event, span_opts(socket, ctx) do
-      socket = socket.assigns.game_view_module.handle_game_event(socket, payload)
+      # socket = socket.assigns.game_view_module.handle_game_event(socket, payload)
+      %{game_view_module: game_view_module, game_id: game_id} = socket.assigns
+      send_update(game_view_module, id: game_id, type: :game_event, payload: payload)
       {:noreply, socket}
     end
   end
@@ -111,23 +114,26 @@ defmodule GamePlatform.PlayerView do
       socket = socket
       |> cancel_reconnect_timer()
       |> assign(:connection_state, :synced)
-      |> socket.assigns.game_view_module.handle_sync(payload)
+      # |> socket.assigns.game_view_module.handle_sync(payload)
+
+      %{game_view_module: game_view_module, game_id: game_id} = socket.assigns
+      send_update(game_view_module, id: game_id, type: :sync, payload: payload)
 
       {:noreply, socket}
     end
   end
 
-  def handle_info(msg, socket) do
-    # Delegate all other "handle_info"s to the implementation module.
-    socket.assigns.game_view_module.handle_info(msg, socket)
-  end
+  # def handle_info(msg, socket) do
+  #   # Delegate all other "handle_info"s to the implementation module.
+  #   socket.assigns.game_view_module.handle_info(msg, socket)
+  # end
 
-  def handle_event(event, unsigned_params, socket) do
-    Tracer.with_span :pv_handle_event, span_opts(socket) do
-      # Delegate handle_event to the implementation module
-      socket.assigns.game_view_module.handle_event(event, unsigned_params, socket)
-    end
-  end
+  # def handle_event(event, unsigned_params, socket) do
+  #   Tracer.with_span :pv_handle_event, span_opts(socket) do
+  #     # Delegate handle_event to the implementation module
+  #     socket.assigns.game_view_module.handle_event(event, unsigned_params, socket)
+  #   end
+  # end
 
   def render(%{connection_state: :loading} = assigns) do
     # This is necessary since "mount" is called twice.
@@ -150,33 +156,39 @@ defmodule GamePlatform.PlayerView do
   end
 
   def render(assigns) do
-    Tracer.with_span :pv_render, span_opts(assigns) do
-      # Delegate render to the implementation module
-      assigns.game_view_module.render(assigns)
-    end
+    ~H"""
+    <div><p>WRAPPER LAYOUT</p>
+      <.live_component module={@game_view_module}
+        id={@game_id} game_id={@game_id} player_id={@player_id} />
+    </div>
+    """
+    # Tracer.with_span :pv_render, span_opts(assigns) do
+    #   # Delegate render to the implementation module
+    #   assigns.game_view_module.render(assigns)
+    # end
   end
 
-  defp span_opts(%Phoenix.LiveView.Socket{} = socket) do
-    %{
-      attributes: [
-        {:game_id, socket.assigns.game_id},
-        {:player_id, socket.assigns.player_id},
-        {:module, __MODULE__},
-        {:game_module, socket.assigns.game_view_module},
-      ]
-    }
-  end
+  # defp span_opts(%Phoenix.LiveView.Socket{} = socket) do
+  #   %{
+  #     attributes: [
+  #       {:game_id, socket.assigns.game_id},
+  #       {:player_id, socket.assigns.player_id},
+  #       {:module, __MODULE__},
+  #       {:game_module, socket.assigns.game_view_module},
+  #     ]
+  #   }
+  # end
 
-  defp span_opts(assigns) do
-    %{
-      attributes: [
-        {:game_id, assigns.game_id},
-        {:player_id, assigns.player_id},
-        {:module, __MODULE__},
-        {:game_module, assigns.game_view_module},
-      ]
-    }
-  end
+  # defp span_opts(assigns) do
+  #   %{
+  #     attributes: [
+  #       {:game_id, assigns.game_id},
+  #       {:player_id, assigns.player_id},
+  #       {:module, __MODULE__},
+  #       {:game_module, assigns.game_view_module},
+  #     ]
+  #   }
+  # end
 
   defp span_opts(%Phoenix.LiveView.Socket{} = socket, ctx) do
     %{
