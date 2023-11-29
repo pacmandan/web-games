@@ -9,6 +9,11 @@ defmodule GamePlatform.PlayerComponent do
     payload :: term()
   ) :: {:ok, Phoenix.LiveView.Socket.t()}
 
+  @callback handle_display_event(
+    socket :: Phoenix.LiveView.Socket.t(),
+    payload :: term()
+  ) :: {:ok, Phoenix.LiveView.Socket.t()}
+
   defmacro __using__(_) do
     quote do
       use Phoenix.LiveComponent
@@ -22,11 +27,20 @@ defmodule GamePlatform.PlayerComponent do
         handle_sync(socket, payload)
       end
 
+      def update(%{type: :display, payload: payload}, socket) do
+        handle_display_event(socket, payload)
+      end
+
       def update(assigns, socket) do
         {:ok, assign(socket, assigns)}
       end
 
+      def handle_display_event(socket, _) do
+        {:ok, socket}
+      end
+
       defoverridable Phoenix.LiveComponent
+      defoverridable GamePlatform.PlayerComponent
     end
   end
 end

@@ -1,5 +1,5 @@
-defmodule WebGamesWeb.LightCycles.PlayerState do
-  use GamePlatform.PlayerState
+defmodule WebGamesWeb.LightCycles.PlayerComponent do
+  use GamePlatform.PlayerComponent
 
   alias GamePlatform.Game
 
@@ -10,7 +10,7 @@ defmodule WebGamesWeb.LightCycles.PlayerState do
     :display,
   ]
 
-  def init(socket) do
+  def mount(socket) do
     {:ok, assign(socket, init_assigns())}
   end
 
@@ -24,14 +24,20 @@ defmodule WebGamesWeb.LightCycles.PlayerState do
   def handle_game_event(socket, msgs), do: process_events(socket, msgs)
   def handle_sync(socket, msgs), do: process_events(socket, msgs)
 
+  def handle_display_event(socket, :clear_display) do
+    {:ok, assign(socket, %{display: ""})}
+  end
+
+  def handle_display_event(socket, _) do
+    {:ok, socket}
+  end
+
   def handle_info({:display_event, _game_id, :clear_display}, socket) do
     {:noreply, assign(socket, %{display: ""})}
   end
 
   def handle_event("turn", %{"key" => key}, %{assigns: %{game_state: %{current_state: :play}}} = socket) do
     player = get_player(socket)
-    # IO.inspect("PLAYER")
-    # IO.inspect(player)
     case key do
       "ArrowUp" ->
         Game.send_event({:turn, :north, player[:location]}, socket.assigns[:player_id], socket.assigns[:game_id])
@@ -51,18 +57,20 @@ defmodule WebGamesWeb.LightCycles.PlayerState do
     {:noreply, socket}
   end
 
-  defp process_events(socket, msgs) do
-    new_assigns = Enum.reduce(msgs, Map.take(socket.assigns, @assigns_keys), &process_event/2)
+  defp process_events(socket, payload) do
+    new_assigns = payload
+    |> List.wrap()
+    |> Enum.reduce(Map.take(socket.assigns, @assigns_keys), &process_event/2)
 
     socket = socket
     |> assign(new_assigns)
     |> draw_grid()
 
-    socket
+    {:ok, socket}
   end
 
   defp process_event(:start_game, assigns) do
-    Process.send_after(self(), {:display_event, assigns.game_id, :clear_display}, :timer.seconds(2))
+    GamePlatform.PlayerView.send_self_event_after(:clear_display, :timer.seconds(2))
     %{assigns | display: "GO!"}
   end
 
@@ -102,8 +110,6 @@ defmodule WebGamesWeb.LightCycles.PlayerState do
   end
 
   defp get_player(socket) do
-    # IO.inspect("SOCKET ASSIGNS")
-    # IO.inspect(socket.assigns)
     id = socket.assigns[:player_id]
     socket.assigns[:game_state][:players][id]
   end
