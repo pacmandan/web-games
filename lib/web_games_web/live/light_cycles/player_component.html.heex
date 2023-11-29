@@ -1,4 +1,4 @@
-<div phx-window-keydown="turn" phx-throttle="10">
+<div phx-window-keydown="turn" phx-target={@myself} phx-throttle="10">
   <canvas id="testCanvas" width="500" height="500" phx-hook="LightCyclesDraw" class="border border-black"></canvas>
   <br/>
   <%= @display %>
