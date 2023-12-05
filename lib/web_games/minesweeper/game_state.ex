@@ -9,6 +9,7 @@ defmodule WebGames.Minesweeper.GameState do
     player: nil,
     start_time: nil,
     end_time: nil,
+    game_type: nil,
   ]
 
   @post_game_timeout :timer.minutes(2)
@@ -18,7 +19,7 @@ defmodule WebGames.Minesweeper.GameState do
 
   alias GamePlatform.PubSubMessage
   alias WebGames.Minesweeper.Config
-  # alias WebGames.Minesweeper.Display
+  alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
   # alias GamePlatform.Notification
 
@@ -43,6 +44,7 @@ defmodule WebGames.Minesweeper.GameState do
         w: config.width,
         h: config.height,
         num_mines: config.num_mines,
+        game_type: config.type,
         grid: create_blank_grid(config),
       }
       # Display.display_grid(game)
@@ -124,7 +126,15 @@ defmodule WebGames.Minesweeper.GameState do
       end)
       |> Enum.into(%{})
 
-      sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines, status: game.status, start_time: game.start_time}
+      sync_data = %{
+        grid: display_grid,
+        width: game.w,
+        height: game.h,
+        num_mines: game.num_mines,
+        status: game.status,
+        start_time: game.start_time,
+        end_time: game.end_time
+      }
 
       {n, g} = game
       |> add_sync_notification({:player, player_id}, {:sync, sync_data})
@@ -150,7 +160,7 @@ defmodule WebGames.Minesweeper.GameState do
     |> update_status()
     |> take_notifications()
 
-    # Display.display_grid(g, true)
+    Display.display_grid(g, true)
 
     {:ok, n, g}
   end

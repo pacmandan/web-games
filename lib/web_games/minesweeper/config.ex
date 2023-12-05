@@ -1,5 +1,6 @@
 defmodule WebGames.Minesweeper.Config do
   defstruct [
+    :type,
     width: 10,
     height: 10,
     num_mines: 10,
@@ -11,14 +12,14 @@ defmodule WebGames.Minesweeper.Config do
     num_mines: integer(),
   }
 
-  def beginner(), do: %__MODULE__{width: 9, height: 9, num_mines: 10}
+  def beginner(), do: %__MODULE__{width: 9, height: 9, num_mines: 10, type: :beginner}
 
-  def intermediate(), do: %__MODULE__{width: 16, height: 16, num_mines: 40}
+  def intermediate(), do: %__MODULE__{width: 16, height: 16, num_mines: 40, type: :intermediate}
 
-  def advanced(), do: %__MODULE__{width: 30, height: 16, num_mines: 99}
+  def advanced(), do: %__MODULE__{width: 30, height: 16, num_mines: 99, type: :advanced}
 
   def custom(width, height, num_mines) do
-    %__MODULE__{width: coerce_to_integer(width), height: coerce_to_integer(height), num_mines: coerce_to_integer(num_mines)}
+    %__MODULE__{width: coerce_to_integer(width), height: coerce_to_integer(height), num_mines: coerce_to_integer(num_mines), type: :custom}
   end
 
   defp coerce_to_integer(i) when i |> is_integer(), do: i
