@@ -34,6 +34,35 @@ Hooks.MinesweeperFlag = {
   }
 }
 
+Hooks.MinesweeperTimer = {
+  mounted() {
+    let el = this.el
+    let start = Date.parse(el.getAttribute("phx-value-start_time"))
+
+    function updateClock() {
+      duration = new Date() - start
+      total_seconds = Math.floor(duration / 1000)
+      minutes = Math.floor(total_seconds / 60)
+      seconds = total_seconds - (minutes * 60)
+
+      el.innerHTML = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    }
+
+    let timer = setInterval(updateClock, 1000)
+
+    this.handleEvent("end_game", ({"end_time": end_time}) => {
+      clearInterval(timer)
+
+      duration = Date.parse(end_time) - start
+      total_seconds = Math.floor(duration / 1000)
+      minutes = Math.floor(total_seconds / 60)
+      seconds = total_seconds - (minutes * 60)
+
+      el.innerHTML = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    })
+  }
+}
+
 Hooks.LightCyclesDraw = {
   mounted() {
     this.handleEvent("draw", ({players}) => {

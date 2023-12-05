@@ -92,7 +92,7 @@ defmodule GamePlatform.PlayerView do
     {:noreply, socket}
   end
 
-  def handle_info(%PubSubMessage{type: :game_event, payload: payload, ctx: ctx}, socket) when socket.assigns.connection_state == :synced do
+  def handle_info(%PubSubMessage{type: :game_event, payload: payload, ctx: ctx}, socket) when socket.assigns.connection_state == :connected do
     Tracer.with_span :pv_handle_game_event, span_opts(socket, ctx) do
       # socket = socket.assigns.game_view_module.handle_game_event(socket, payload)
       %{game_view_module: game_view_module, game_id: game_id} = socket.assigns
@@ -110,7 +110,7 @@ defmodule GamePlatform.PlayerView do
     Tracer.with_span ctx, :pv_handle_sync, span_opts(socket, ctx) do
       socket = socket
       |> cancel_reconnect_timer()
-      |> assign(:connection_state, :synced)
+      |> assign(:connection_state, :connected)
       # |> socket.assigns.game_view_module.handle_sync(payload)
 
       %{game_view_module: game_view_module, game_id: game_id} = socket.assigns
@@ -149,9 +149,28 @@ defmodule GamePlatform.PlayerView do
 
   def render(assigns) do
     ~H"""
-    <div><p>WRAPPER LAYOUT</p>
+    <div><.connection_state_overlay connection_state={@connection_state} />
       <.live_component module={@game_view_module}
         id={@game_id} game_id={@game_id} player_id={@player_id} />
+    </div>
+    """
+  end
+
+  def connection_state_overlay(assigns) do
+    ~H"""
+    <div>
+      <%= case @connection_state do %>
+        <% :loading -> %>
+          <p>LOADING...</p>
+        <% :connecting_to_server -> %>
+          <p>CONNECTING TO SERVER...</p>
+        <% :server_down -> %>
+          <p>SERVER DOWN...</p>
+        <% :connected -> %>
+          <p>CONNECTED!</p>
+        <% _ -> %>
+          <p>UNKNOWN CONNECTION STATE</p>
+      <% end %>
     </div>
     """
   end
@@ -181,7 +200,7 @@ defmodule GamePlatform.PlayerView do
 
   defp connect_player(%{assigns: %{game_id: game_id, player_id: player_id}} = socket) do
     Game.player_connected(player_id, game_id, self())
-    assign(socket, :connection_state, :waiting_for_sync)
+    assign(socket, :connection_state, :connecting_to_server)
   end
 
   defp cancel_reconnect_timer(socket) do
