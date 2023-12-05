@@ -15,6 +15,7 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     :num_mines,
     :clicks_enabled?,
     :display_grid,
+    :start_time,
   ]
 
   @impl true
@@ -29,6 +30,7 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
       display_grid: %{},
       status: :play,
       clicks_enabled?: true,
+      start_time: nil,
     }
   end
 
@@ -84,22 +86,24 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_msg({:game_over, :lose}, assigns) do
+  defp process_msg({:game_over, %{status: :lose, end_time: time}}, assigns) do
     assigns
     |> Map.put(:status, :lose)
+    |> Map.put(:end_time, time)
     |> Map.put(:clicks_enabled?, false)
     |> render_full_grid()
   end
 
-  defp process_msg({:game_over, :win}, assigns) do
+  defp process_msg({:game_over, %{status: :win, end_time: time}}, assigns) do
     assigns
     |> Map.put(:status, :win)
+    |> Map.put(:end_time, time)
     |> Map.put(:clicks_enabled?, false)
     |> render_full_grid()
   end
 
-  defp process_msg({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status}}, assigns) do
-    Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n, status: status})
+  defp process_msg({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status, start_time: start_time}}, assigns) do
+    Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n, status: status, start_time: start_time})
     |> render_full_grid()
   end
 
@@ -152,6 +156,7 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     }
   end
 
+  defp background_color(%{has_mine?: true, flagged?: true}), do: "bg-green-400"
   defp background_color(%{opened?: true, has_mine?: true}), do: "bg-red-400"
   defp background_color(%{opened?: true}), do: "bg-gray-300"
   defp background_color(_), do: "bg-gray-500"
@@ -168,8 +173,8 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
   defp text_color(%{value: value}) when value in [8, "8"], do: "text-gray-700"
   defp text_color(_), do: "text-black"
 
-  defp display_value(%{has_mine?: true}, :win), do: "+"
-  defp display_value(%{has_mine?: true, flagged?: true}, _), do: "O"
+  defp display_value(%{has_mine?: true}, :win), do: "F" # "+"
+  defp display_value(%{has_mine?: true, flagged?: true}, _), do: "F" # "O"
   defp display_value(%{has_mine?: true}, _), do: "X"
   defp display_value(%{flagged?: true}, _), do: "F"
   defp display_value(%{value: 0}, _), do: nil

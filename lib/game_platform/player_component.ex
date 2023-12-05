@@ -16,7 +16,7 @@ defmodule GamePlatform.PlayerComponent do
 
   defmacro __using__(_) do
     quote do
-      use Phoenix.LiveComponent
+      use WebGamesWeb, :live_component
       @behaviour GamePlatform.PlayerComponent
 
       def update(%{type: :game_event, payload: payload}, socket) do

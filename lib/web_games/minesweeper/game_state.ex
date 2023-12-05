@@ -8,6 +8,7 @@ defmodule WebGames.Minesweeper.GameState do
     notifications: [],
     player: nil,
     start_time: nil,
+    end_time: nil,
   ]
 
   @post_game_timeout :timer.minutes(2)
@@ -123,7 +124,7 @@ defmodule WebGames.Minesweeper.GameState do
       end)
       |> Enum.into(%{})
 
-      sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines, status: game.status}
+      sync_data = %{grid: display_grid, width: game.w, height: game.h, num_mines: game.num_mines, status: game.status, start_time: game.start_time}
 
       {n, g} = game
       |> add_sync_notification({:player, player_id}, {:sync, sync_data})
@@ -246,9 +247,12 @@ defmodule WebGames.Minesweeper.GameState do
     # In which case, we'd need to keep track of this ref to cancel it on reset.
     GamePlatform.GameServer.end_game(@post_game_timeout)
 
+    end_time = DateTime.utc_now()
+
     game
     |> Map.put(:status, status)
-    |> add_notification(:all, {:game_over, status})
+    |> Map.put(:end_time, end_time)
+    |> add_notification(:all, {:game_over, %{status: status, end_time: end_time}})
     |> add_notification(:all, {:show_mines, get_mine_locations(game.grid)})
   end
 
