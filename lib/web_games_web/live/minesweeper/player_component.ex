@@ -4,20 +4,6 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
   require OpenTelemetry.Tracer
   alias GamePlatform.Game
 
-  @assigns_keys [
-    :grid,
-    :events,
-    :player_id,
-    :game_id,
-    :status,
-    :height,
-    :width,
-    :num_mines,
-    :clicks_enabled?,
-    :display_grid,
-    :start_time,
-  ]
-
   @impl true
   def mount(socket) do
     {:ok, assign(socket, init_assigns()), temporary_assigns: [display_grid: %{}]}
@@ -31,6 +17,7 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
       status: :play,
       clicks_enabled?: true,
       start_time: nil,
+      end_time: nil,
     }
   end
 
@@ -49,72 +36,85 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
   end
 
   defp process_payload(socket, payload) do
-    new_assigns = payload
+    payload
     |> List.wrap()
-    |> Enum.reduce(Map.take(socket.assigns, @assigns_keys), &process_msg/2)
-
-    assign(socket, new_assigns)
+    |> Enum.reduce(socket, &process_msg/2)
   end
 
-  defp process_msg({:click, cells}, %{grid: grid} = assigns) do
+  defp process_msg({:click, cells}, %{assigns: %{grid: grid}} = socket) do
     new_grid = Enum.into(cells, grid, fn {coord, clicked?} ->
       {coord, %{grid[coord] | clicked?: clicked?}}
     end)
 
-    assigns
-    |> Map.put(:grid, new_grid)
+    socket
+    |> assign(:grid, new_grid)
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_msg({:open, cells}, %{grid: grid} = assigns) do
+  defp process_msg({:open, cells}, %{assigns: %{grid: grid}} = socket) do
     new_grid = Enum.into(cells, grid, fn {coord, value} ->
       {coord, %{grid[coord] | value: value, opened?: true}}
     end)
 
-    assigns
-    |> Map.put(:grid, new_grid)
+    socket
+    |> assign(:grid, new_grid)
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_msg({:flag, cells}, %{grid: grid} = assigns) do
+  defp process_msg({:flag, cells}, %{assigns: %{grid: grid}} = socket) do
     new_grid = Enum.into(cells, grid, fn {coord, flagged?} ->
       {coord, %{grid[coord] | flagged?: flagged?}}
     end)
 
-    assigns
-    |> Map.put(:grid, new_grid)
+    socket
+    |> assign(:grid, new_grid)
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_msg({:game_over, %{status: :lose, end_time: time}}, assigns) do
-    assigns
-    |> Map.put(:status, :lose)
-    |> Map.put(:end_time, time)
-    |> Map.put(:clicks_enabled?, false)
+  defp process_msg({:game_over, %{status: :lose, end_time: time}}, socket) do
+    socket
+    # |> push_event("end_game", %{end_time: time})
+    |> assign(:status, :lose)
+    |> assign(:end_time, time)
+    |> assign(:clicks_enabled?, false)
+    |> update_timer()
     |> render_full_grid()
   end
 
-  defp process_msg({:game_over, %{status: :win, end_time: time}}, assigns) do
-    assigns
-    |> Map.put(:status, :win)
-    |> Map.put(:end_time, time)
-    |> Map.put(:clicks_enabled?, false)
+  defp process_msg({:game_over, %{status: :win, end_time: time}}, socket) do
+    socket
+    # |> push_event("end_game", %{end_time: time})
+    |> assign(:status, :win)
+    |> assign(:end_time, time)
+    |> assign(:clicks_enabled?, false)
+    |> update_timer()
     |> render_full_grid()
   end
 
-  defp process_msg({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status, start_time: start_time}}, assigns) do
-    Map.merge(assigns, %{grid: grid, height: h, width: w, num_mines: n, status: status, start_time: start_time})
+  defp process_msg({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status, start_time: start_time, end_time: end_time}}, socket) do
+    socket
+    |> assign(%{grid: grid, height: h, width: w, num_mines: n, status: status, start_time: start_time, end_time: end_time})
+    |> update_timer()
     |> render_full_grid()
   end
 
-  defp process_msg({:show_mines, coord_list}, %{grid: grid} = assigns) do
+  defp process_msg({:show_mines, coord_list}, %{assigns: %{grid: grid}} = socket) do
     new_grid = Enum.into(coord_list, grid, fn coord ->
       {coord, %{grid[coord] | has_mine?: true}}
     end)
 
-    assigns
-    |> Map.put(:grid, new_grid)
+    socket
+    |> assign(:grid, new_grid)
     |> render_cells(coord_list)
+  end
+
+  defp update_timer(%{assigns: %{end_time: nil}} = socket) do
+    socket
+  end
+
+  defp update_timer(%{assigns: %{end_time: time}} = socket) do
+    socket
+    |> push_event("end_game", %{end_time: time})
   end
 
   @impl true
@@ -133,17 +133,18 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     {:noreply, socket}
   end
 
-  defp render_cells(assigns, coords) do
-    Enum.map(coords, fn coord ->
-      {coord, render_cell(assigns.grid[coord], assigns)}
+  defp render_cells(socket, coords) do
+    new_display = Enum.map(coords, fn coord ->
+      {coord, render_cell(socket.assigns.grid[coord], socket.assigns)}
     end)
     |> Enum.into(%{})
-    |> then(fn new_display -> Map.merge(assigns.display_grid, new_display) end)
-    |> then(fn new_display -> Map.put(assigns, :display_grid, new_display) end)
+    |> then(fn new_display -> Map.merge(socket.assigns.display_grid, new_display) end)
+
+    assign(socket, :display_grid, new_display)
   end
 
-  defp render_full_grid(assigns) do
-    render_cells(assigns, Map.keys(assigns.grid))
+  defp render_full_grid(socket) do
+    render_cells(socket, Map.keys(socket.assigns.grid))
   end
 
   defp render_cell(cell, assigns) do
