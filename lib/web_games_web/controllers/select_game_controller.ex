@@ -3,6 +3,6 @@ defmodule WebGamesWeb.SelectGameController do
 
   def select_game(conn, _params) do
     conn
-    |> render(:select_game, layout: false)
+    |> render(:select_game)
   end
 end

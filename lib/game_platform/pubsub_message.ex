@@ -16,10 +16,10 @@ defmodule GamePlatform.PubSubMessage do
 
   @type t :: %__MODULE__{
     payload: any(),
-    from: String.t(),
+    from: String.t() | nil,
     to: topic_ref(),
-    ctx: OpenTelemetry.Ctx.t(),
-    type: :game_event | :sync,
+    ctx: OpenTelemetry.Ctx.t() | nil,
+    type: :game_event | :sync | :shutdown,
   }
 
   def build(to, payload, type \\ :game_event) do

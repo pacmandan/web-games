@@ -6,7 +6,7 @@ defmodule GamePlatform.GameState do
   @type game_state :: term()
 
   @type notifications :: list(term())
-  @type msgs :: [GamePlatform.PubSubMessage.t()]
+  @type msgs :: list(GamePlatform.PubSubMessage.t())
 
   @type player_id :: String.t()
 

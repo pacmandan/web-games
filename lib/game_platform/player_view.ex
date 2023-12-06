@@ -120,6 +120,16 @@ defmodule GamePlatform.PlayerView do
     end
   end
 
+  def handle_info(%PubSubMessage{type: :shutdown, payload: _payload, ctx: ctx}, socket) do
+    Tracer.with_span ctx, :pv_handle_shutdown, span_opts(socket, ctx) do
+      socket = socket
+      |> put_flash(:info, "Server has shut down")
+      |> redirect(to: "/select-game")
+
+      {:noreply, socket}
+    end
+  end
+
   def handle_info({:display_event, payload}, socket) do
     %{game_view_module: game_view_module, game_id: game_id} = socket.assigns
     send_update(game_view_module, id: game_id, type: :display, payload: payload)

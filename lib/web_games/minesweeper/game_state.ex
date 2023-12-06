@@ -34,13 +34,15 @@ defmodule WebGames.Minesweeper.GameState do
     grid: grid_t(),
     status: :init | :play | :win | :lose,
     start_time: DateTime.t(),
+    end_time: DateTime.t(),
+    game_type: String.t(),
   }
 
   @impl true
   def init(config) do
     if Config.valid?(config) do
       game = %__MODULE__{
-        start_time: DateTime.utc_now(),
+        # start_time: DateTime.utc_now(),
         w: config.width,
         h: config.height,
         num_mines: config.num_mines,
@@ -97,7 +99,10 @@ defmodule WebGames.Minesweeper.GameState do
       |> Enum.reduce(grid, fn {adj_coord, cell}, grid -> Map.replace(grid, adj_coord, cell) end)
     end)
 
-    %__MODULE__{game | grid: prepared_grid, status: :play}
+    start_time = DateTime.utc_now()
+
+    %__MODULE__{game | grid: prepared_grid, status: :play, start_time: start_time}
+    |> add_notification(:all, {:start_game, start_time})
   end
 
   defp possible_mine_spaces(grid, num_mines, start_space) do
@@ -121,6 +126,9 @@ defmodule WebGames.Minesweeper.GameState do
       # Pre-calculate this so we don't do it inside the loop a bunch of times.
       show_mines? = game.status in [:win, :lose]
 
+      # TODO: This could get expensive, maybe count as flags are placed?
+      num_flags = count_flags(game)
+
       display_grid = Enum.map(game.grid, fn {coord, cell} ->
         {coord, Cell.display(cell, show_mines?)}
       end)
@@ -131,9 +139,11 @@ defmodule WebGames.Minesweeper.GameState do
         width: game.w,
         height: game.h,
         num_mines: game.num_mines,
+        num_flags: num_flags,
         status: game.status,
         start_time: game.start_time,
-        end_time: game.end_time
+        end_time: game.end_time,
+        game_type: game.game_type,
       }
 
       {n, g} = game
@@ -274,17 +284,23 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   defp take_notifications(game) do
-    # {Notification.collate_notifications(game.notifications), struct(game, notifications: [])}
     {PubSubMessage.combine_msgs(game.notifications), struct(game, notifications: [])}
   end
 
   defp add_notification(game, to, msg) do
-    #%__MODULE__{game | notifications: [Notification.build(to, msg) | game.notifications]}
     %__MODULE__{game | notifications: [PubSubMessage.build(to, msg) | game.notifications]}
   end
 
   defp add_sync_notification(game, to, msg) do
     %__MODULE__{game | notifications: [PubSubMessage.build(to, msg, :sync) | game.notifications]}
+  end
+
+  defp count_flags(game) do
+    game.grid
+    |> Enum.reduce(0, fn
+      {_, %{flagged?: true}}, acc -> acc + 1
+      {_, %{flagged?: false}}, acc -> acc
+    end)
   end
 
   @impl true
@@ -313,4 +329,9 @@ defmodule WebGames.Minesweeper.GameState do
 
   @impl true
   def join_game(_, _), do: {:error, :game_full}
+
+  @impl true
+  def handle_game_shutdown(game) do
+    {:ok, [PubSubMessage.build(:all, {:shutdown, :normal}, :shutdown)], game}
+  end
 end

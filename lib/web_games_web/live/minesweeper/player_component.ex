@@ -15,9 +15,13 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
       grid: nil,
       display_grid: %{},
       status: :play,
+      display_status: nil,
       clicks_enabled?: true,
       start_time: nil,
       end_time: nil,
+      num_flags: 0,
+      num_mines: 0,
+      game_type: nil,
     }
   end
 
@@ -41,6 +45,11 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     |> Enum.reduce(socket, &process_msg/2)
   end
 
+  defp process_msg({:start_game, start_time}, socket) do
+    socket
+    |> assign(:start_time, start_time)
+  end
+
   defp process_msg({:click, cells}, %{assigns: %{grid: grid}} = socket) do
     new_grid = Enum.into(cells, grid, fn {coord, clicked?} ->
       {coord, %{grid[coord] | clicked?: clicked?}}
@@ -61,20 +70,26 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_msg({:flag, cells}, %{assigns: %{grid: grid}} = socket) do
+  defp process_msg({:flag, cells}, %{assigns: %{grid: grid, num_flags: num_flags}} = socket) do
     new_grid = Enum.into(cells, grid, fn {coord, flagged?} ->
       {coord, %{grid[coord] | flagged?: flagged?}}
     end)
 
+    new_flags = Enum.reduce(cells, 0, fn
+      {_, true}, acc -> acc + 1
+      {_, false}, acc -> acc - 1
+    end)
+
     socket
     |> assign(:grid, new_grid)
+    |> assign(:num_flags, num_flags + new_flags)
     |> render_cells(Map.keys(cells))
   end
 
   defp process_msg({:game_over, %{status: :lose, end_time: time}}, socket) do
     socket
-    # |> push_event("end_game", %{end_time: time})
     |> assign(:status, :lose)
+    |> assign(:display_status, "BOOM!")
     |> assign(:end_time, time)
     |> assign(:clicks_enabled?, false)
     |> update_timer()
@@ -83,17 +98,18 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
 
   defp process_msg({:game_over, %{status: :win, end_time: time}}, socket) do
     socket
-    # |> push_event("end_game", %{end_time: time})
     |> assign(:status, :win)
+    |> assign(:display_status, "WIN!")
     |> assign(:end_time, time)
     |> assign(:clicks_enabled?, false)
     |> update_timer()
     |> render_full_grid()
   end
 
-  defp process_msg({:sync, %{grid: grid, height: h, width: w, num_mines: n, status: status, start_time: start_time, end_time: end_time}}, socket) do
+  defp process_msg({:sync, data}, socket) do
     socket
-    |> assign(%{grid: grid, height: h, width: w, num_mines: n, status: status, start_time: start_time, end_time: end_time})
+    |> assign(data)
+    |> coerce_game_type()
     |> update_timer()
     |> render_full_grid()
   end
@@ -118,19 +134,33 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
   end
 
   @impl true
-  def handle_event("click", %{"x" => x, "y" => y}, socket) do
+  def handle_event("click", %{"x" => x, "y" => y}, %{assigns: %{grid: grid}} = socket) do
     x = String.to_integer(x)
     y = String.to_integer(y)
-    Game.send_event({:open, {x, y}}, socket.assigns[:player_id], socket.assigns[:game_id])
+    unless grid[{x, y}].opened? do
+      Game.send_event({:open, {x, y}}, socket.assigns[:player_id], socket.assigns[:game_id])
+    end
     {:noreply, socket}
   end
 
   @impl true
-  def handle_event("flag", %{"x" => x, "y" => y}, socket) do
+  def handle_event("flag", %{"x" => x, "y" => y}, %{assigns: %{grid: grid}} = socket) do
     x = String.to_integer(x)
     y = String.to_integer(y)
-    Game.send_event({:flag, {x, y}}, socket.assigns[:player_id], socket.assigns[:game_id])
+    unless grid[{x, y}].opened? do
+      Game.send_event({:flag, {x, y}}, socket.assigns[:player_id], socket.assigns[:game_id])
+    end
     {:noreply, socket}
+  end
+
+  defp coerce_game_type(%{assigns: %{game_type: type}} = socket) when type |> is_atom() do
+    socket
+    |> assign(:game_type, type |> Atom.to_string() |> String.capitalize())
+  end
+
+  defp coerce_game_type(%{assigns: %{game_type: type}} = socket) when type |> is_binary() do
+    socket
+    |> assign(:game_type, type |> String.capitalize())
   end
 
   defp render_cells(socket, coords) do
