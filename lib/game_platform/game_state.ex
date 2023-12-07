@@ -70,8 +70,22 @@ defmodule GamePlatform.GameState do
   """
   @callback handle_game_shutdown(game_state()) :: {:ok, msgs(), game_state()}
 
+  defmodule GameInfo do
+    @enforce_keys [:server_module, :view_module, :display_name]
+    defstruct [
+      :server_module,
+      :view_module,
+      :display_name,
+    ]
+    @type t :: %__MODULE__{
+      server_module: module(),
+      view_module: module(),
+      display_name: String.t(),
+    }
+  end
+
   defmacro __using__(opts) do
-    %{view_module: view_module} = Enum.into(opts, %{})
+    %{view_module: view_module, display_name: display_name} = Enum.into(opts, %{})
     quote do
       @behaviour GamePlatform.GameState
 
@@ -81,7 +95,15 @@ defmodule GamePlatform.GameState do
       def player_disconnected(state, _), do: {:ok, [], state}
       def handle_event(_, _, state), do: {:ok, [], state}
       def handle_game_shutdown(state), do: {:ok, [], state}
-      def game_view_module(), do: unquote(view_module)
+      def game_info() do
+        info = %GamePlatform.GameState.GameInfo{
+          server_module: __MODULE__,
+          view_module: unquote(view_module),
+          display_name: unquote(display_name)
+        }
+
+        {:ok, info}
+      end
       defoverridable GamePlatform.GameState
     end
   end

@@ -34,8 +34,8 @@ defmodule GamePlatform.Game do
     GenServer.cast(GameServer.via_tuple(game_id), msg)
   end
 
-  def get_game_type(game_id) do
-    GenServer.call(GameServer.via_tuple(game_id), :game_type)
+  def get_game_info(game_id) do
+    GenServer.call(GameServer.via_tuple(game_id), :game_info)
   end
 
   # TODO: Move some of these Registry.lookup() functions into GameRegistry

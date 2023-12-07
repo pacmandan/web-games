@@ -45,10 +45,10 @@ defmodule GamePlatform.PlayerView do
   end
 
   defp fetch_game_type(socket) do
-    if socket.assigns[:game_view_module] |> is_nil() do
-      {:ok, _state_module, game_view_module} = Game.get_game_type(socket.assigns.game_id)
+    if socket.assigns[:game_info] |> is_nil() do
+      {:ok, game_info} = Game.get_game_info(socket.assigns.game_id)
 
-      assign(socket, :game_view_module, game_view_module)
+      assign(socket, :game_info, game_info)
     else
       socket
     end
@@ -94,9 +94,8 @@ defmodule GamePlatform.PlayerView do
 
   def handle_info(%PubSubMessage{type: :game_event, payload: payload, ctx: ctx}, socket) when socket.assigns.connection_state == :connected do
     Tracer.with_span :pv_handle_game_event, span_opts(socket, ctx) do
-      # socket = socket.assigns.game_view_module.handle_game_event(socket, payload)
-      %{game_view_module: game_view_module, game_id: game_id} = socket.assigns
-      send_update(game_view_module, id: game_id, type: :game_event, payload: payload)
+      %{game_info: %{view_module: view_module}, game_id: game_id} = socket.assigns
+      send_update(view_module, id: game_id, type: :game_event, payload: payload)
       {:noreply, socket}
     end
   end
@@ -111,10 +110,9 @@ defmodule GamePlatform.PlayerView do
       socket = socket
       |> cancel_reconnect_timer()
       |> assign(:connection_state, :connected)
-      # |> socket.assigns.game_view_module.handle_sync(payload)
 
-      %{game_view_module: game_view_module, game_id: game_id} = socket.assigns
-      send_update(game_view_module, id: game_id, type: :sync, payload: payload)
+      %{game_info: %{view_module: view_module}, game_id: game_id} = socket.assigns
+      send_update(view_module, id: game_id, type: :sync, payload: payload)
 
       {:noreply, socket}
     end
@@ -131,8 +129,8 @@ defmodule GamePlatform.PlayerView do
   end
 
   def handle_info({:display_event, payload}, socket) do
-    %{game_view_module: game_view_module, game_id: game_id} = socket.assigns
-    send_update(game_view_module, id: game_id, type: :display, payload: payload)
+    %{game_info: %{view_module: view_module}, game_id: game_id} = socket.assigns
+    send_update(view_module, id: game_id, type: :display, payload: payload)
 
     {:noreply, socket}
   end
@@ -159,29 +157,27 @@ defmodule GamePlatform.PlayerView do
 
   def render(assigns) do
     ~H"""
-    <div><.connection_state_overlay connection_state={@connection_state} />
-      <.live_component module={@game_view_module}
+    <div><%= @game_info.display_name %> - [<.connection_state_string connection_state={@connection_state} />]
+      <.live_component module={@game_info.view_module}
         id={@game_id} game_id={@game_id} player_id={@player_id} />
     </div>
     """
   end
 
-  def connection_state_overlay(assigns) do
+  def connection_state_string(assigns) do
     ~H"""
-    <div>
-      <%= case @connection_state do %>
-        <% :loading -> %>
-          <p>LOADING...</p>
-        <% :connecting_to_server -> %>
-          <p>CONNECTING TO SERVER...</p>
-        <% :server_down -> %>
-          <p>SERVER DOWN...</p>
-        <% :connected -> %>
-          <p>CONNECTED!</p>
-        <% _ -> %>
-          <p>UNKNOWN CONNECTION STATE</p>
-      <% end %>
-    </div>
+    <%= case @connection_state do %>
+      <% :loading -> %>
+        LOADING...
+      <% :connecting_to_server -> %>
+        CONNECTING TO SERVER...
+      <% :server_down -> %>
+        SERVER DOWN...
+      <% :connected -> %>
+        CONNECTED
+      <% _ -> %>
+        UNKNOWN CONNECTION STATE
+    <% end %>
     """
   end
 
@@ -195,7 +191,7 @@ defmodule GamePlatform.PlayerView do
         {:game_id, socket.assigns.game_id},
         {:player_id, socket.assigns.player_id},
         {:module, __MODULE__},
-        {:game_module, socket.assigns.game_view_module},
+        {:view_module, socket.assigns.game_info.view_module},
       ],
       links: [OpenTelemetry.link(ctx)]
     }

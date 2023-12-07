@@ -150,10 +150,10 @@ defmodule GamePlatform.GameServer do
   end
 
   @impl true
-  def handle_call(:game_type, _from, state) do
-    Tracer.with_span :gs_game_type, span_opts(state) do
+  def handle_call(:game_info, _from, state) do
+    Tracer.with_span :gs_game_info, span_opts(state) do
       # Return the game module this server is running.
-      {:reply, {:ok, state.game_module, state.game_module.game_view_module()}, state}
+      {:reply, state.game_module.game_info(), state}
     end
   end
 
