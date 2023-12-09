@@ -1,32 +1,36 @@
 <div>
-  <div :if={!is_nil(@start_time)}><p phx-hook="MinesweeperTimer" id="timer" phx-value-start_time={@start_time} phx-update="ignore" class="font-mono text-2xl text-center">00:00</p></div>
-  <div :if={is_nil(@start_time)}><p class="font-mono text-2xl text-center">00:00</p></div>
-  <div class="grid grid-cols-3">
-    <span><img src={~p"/images/ms-flag.svg"} width="24px" height="24px" class="inline-block m-1" /><span class="text-center"><%= @num_flags %>/<%= @num_mines %></span></span>
-    <span class="font-bold text-center"><span :if={@status in [:win, :lose]}><%= @display_status %></span></span>
-    <span class="text-right"><span class="font-bold">Game: </span><%= @game_type %></span>
+  <div class="max-w-2xl mx-auto">
+    <div :if={!is_nil(@start_time)}><p phx-hook="MinesweeperTimer" id="timer" phx-value-start_time={@start_time} phx-update="ignore" class="font-mono text-2xl text-center">00:00</p></div>
+    <div :if={is_nil(@start_time)}><p class="font-mono text-2xl text-center">00:00</p></div>
+    <div class="grid grid-cols-3">
+      <span><img src={~p"/images/ms-flag.svg"} width="24px" height="24px" class="inline-block m-1" /><span class="text-center"><%= @num_flags %>/<%= @num_mines %></span></span>
+      <span class="font-bold text-center"><span :if={@status in [:win, :lose]}><%= @display_status %></span></span>
+      <span class="text-right"><span class="font-bold">Game: </span><%= @game_type %></span>
+    </div>
   </div>
-  <div style={"display:grid; justify-content:center; grid-template-columns:repeat(#{@width},32px); grid-template-rows:repeat(#{@height},32px);"} :if={!is_nil(@grid)} id="cell_grid" phx-update="append">
-    <%= for {{x,y}, cell} <- @display_grid do %>
-      <div style={"grid-column-start:#{x};grid-row-start:#{y}"} id={"cell_box_#{x}_#{y}"}>
-        <div class={"w-8 h-8 #{cell.background_color} #{cell.text_color} #{cell.border_color} border text-center"}
-          phx-click={if @clicks_enabled?, do: "click", else: nil}
-          phx-target={@myself}
-          phx-hook="MinesweeperFlag"
-          phx-value-x={x}
-          phx-value-y={y}
-          id={"cell_click_#{x}_#{y}"}
-        >
-          <%= case cell.value do %>
-          <% "F" -> %>
-            <img src={~p"/images/ms-flag.svg"} />
-          <% "X" -> %>
-            <img src={~p"/images/ms-mine.svg"} />
-          <% _ -> %>
-            <%= cell.value %>
-          <% end %>
+  <div class="w-full overflow-x-auto grid">
+    <div style={"display:grid; justify-self:center; grid-template-columns:repeat(#{@width},32px); grid-template-rows:repeat(#{@height},32px);"} :if={!is_nil(@grid)} id="cell_grid" phx-update="append">
+      <%= for {{x,y}, cell} <- @display_grid do %>
+        <div style={"grid-column-start:#{x};grid-row-start:#{y}"} id={"cell_box_#{x}_#{y}"}>
+          <div class={"w-8 h-8 #{cell.background_color} #{cell.text_color} #{cell.border_color} border text-center"}
+            phx-click={if @clicks_enabled?, do: "click", else: nil}
+            phx-target={@myself}
+            phx-hook="MinesweeperFlag"
+            phx-value-x={x}
+            phx-value-y={y}
+            id={"cell_click_#{x}_#{y}"}
+          >
+            <%= case cell.value do %>
+            <% "F" -> %>
+              <img src={~p"/images/ms-flag.svg"} />
+            <% "X" -> %>
+              <img src={~p"/images/ms-mine.svg"} />
+            <% _ -> %>
+              <%= cell.value %>
+            <% end %>
+          </div>
         </div>
-      </div>
-    <% end %>
+      <% end %>
+    </div>
   </div>
 </div>
