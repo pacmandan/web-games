@@ -34,6 +34,15 @@ defmodule GamePlatform.Game do
     GenServer.cast(GameServer.via_tuple(game_id), msg)
   end
 
+  def leave_game(player_id, game_id) do
+    msg = %GameMessage{
+      action: :player_leave,
+      from: player_id,
+      ctx: OpenTelemetry.Tracer.current_span_ctx(),
+    }
+    GenServer.call(GameServer.via_tuple(game_id), msg)
+  end
+
   def get_game_info(game_id) do
     GenServer.call(GameServer.via_tuple(game_id), :game_info)
   end

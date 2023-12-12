@@ -135,6 +135,16 @@ defmodule GamePlatform.PlayerView do
     {:noreply, socket}
   end
 
+  def handle_event("leave_game", _unsigned_params, socket) do
+    Game.leave_game(socket.assigns.player_id, socket.assigns.game_id)
+
+    socket = socket
+    |> put_flash(:info, "Left game #{socket.assigns.game_id}")
+    |> redirect(to: "/select-game")
+
+    {:noreply, socket}
+  end
+
   def render(%{connection_state: :loading} = assigns) do
     # This is necessary since "mount" is called twice.
     # Which means "render" is called twice - once before the WS connection,
@@ -157,14 +167,18 @@ defmodule GamePlatform.PlayerView do
 
   def render(assigns) do
     ~H"""
-    <div><%= @game_info.display_name %> - [<.connection_state_string connection_state={@connection_state} />]
+    <div>
+      <div class="pb-10 text-slate-400" >
+        <%= @game_info.display_name %> - [<.connection_state_string connection_state={@connection_state} />]
+        <.button phx-click="leave_game">Leave Game</.button>
+      </div>
       <.live_component module={@game_info.view_module}
         id={@game_id} game_id={@game_id} player_id={@player_id} />
     </div>
     """
   end
 
-  def connection_state_string(assigns) do
+  defp connection_state_string(assigns) do
     ~H"""
     <%= case @connection_state do %>
       <% :loading -> %>

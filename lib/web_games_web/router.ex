@@ -28,6 +28,10 @@ defmodule WebGamesWeb.Router do
     pipe_through [:browser]
 
     get "/", PageController, :home
+    get "/about", PageController, :about
+    get "/games", PageController, :games_list
+    get "/games/minesweeper", PageController, :minesweeper_form
+    get "/join", PageController, :join_game
     get "/select-game", SelectGameController, :select_game
     post "/new-game/minesweeper", NewGameController, :start_minesweeper
     post "/new-game/lightcycles", NewGameController, :start_lightcycles
@@ -36,13 +40,13 @@ defmodule WebGamesWeb.Router do
   scope "/test", WebGamesWeb do
     pipe_through [:browser, :test_game]
 
-    live ":game_id", Test
+    live "/:game_id", Test
   end
 
   scope "/play" do
     pipe_through [:browser, :game]
 
-    live ":game_id", GamePlatform.PlayerView
+    live "/:game_id", GamePlatform.PlayerView
   end
 
   # Other scopes may use custom stacks.
