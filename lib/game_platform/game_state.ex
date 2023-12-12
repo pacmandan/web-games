@@ -38,7 +38,7 @@ defmodule GamePlatform.GameState do
   @doc """
   Removes a player from the state. Typically called by the server whenever a player has disconnected and timed out.
   """
-  @callback leave_game(game_state(), player_id()) ::
+  @callback leave_game(game_state(), player_id(), reason :: atom()) ::
     {:ok, msgs(), game_state()}
 
   @doc """
@@ -90,7 +90,7 @@ defmodule GamePlatform.GameState do
       @behaviour GamePlatform.GameState
 
       def join_game(state, _), do: {:ok, [], state}
-      def leave_game(state, _), do: {:ok, [], state}
+      def leave_game(state, _, _), do: {:ok, [], state}
       def player_connected(_, state), do: {:ok, [], state}
       def player_disconnected(state, _), do: {:ok, [], state}
       def handle_event(_, _, state), do: {:ok, [], state}

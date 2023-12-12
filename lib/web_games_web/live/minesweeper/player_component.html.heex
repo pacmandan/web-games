@@ -1,9 +1,9 @@
-<div>
-  <div class="max-w-2xl mx-auto">
+<div class="text-white">
+  <div class="max-w-lg mx-auto my-3">
     <div :if={!is_nil(@start_time)}><p phx-hook="MinesweeperTimer" id="timer" phx-value-start_time={@start_time} phx-update="ignore" class="font-mono text-2xl text-center">00:00</p></div>
     <div :if={is_nil(@start_time)}><p class="font-mono text-2xl text-center">00:00</p></div>
     <div class="grid grid-cols-3">
-      <span><img src={~p"/images/ms-flag.svg"} width="24px" height="24px" class="inline-block m-1" /><span class="text-center"><%= @num_flags %>/<%= @num_mines %></span></span>
+      <span><img src={~p"/images/ms-flag.svg"} width="32px" height="32px" class="inline-block mr-3 bg-gray-500" /><span class="text-center"><%= @num_flags %>/<%= @num_mines %></span></span>
       <span class="font-bold text-center"><span :if={@status in [:win, :lose]}><%= @display_status %></span></span>
       <span class="text-right"><span class="font-bold">Game: </span><%= @game_type %></span>
     </div>

@@ -157,12 +157,13 @@ defmodule GamePlatform.GameServer do
     end
   end
 
-  # @impl true
-  # def handle_cast({:leave_game, player_id, ctx}, state) do
-  #   Tracer.with_span :leave_game, span_opts(state, [{:player_id, player_id}], ctx) do
-  #     do_remove_player(player_id, state)
-  #   end
-  # end
+  @impl true
+  def handle_call(%GameMessage{action: :player_leave} = msg, _from, state) do
+    Tracer.with_span :gs_player_leave, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
+      {status, new_state} = do_remove_player(msg.from, state, :manual)
+      {:reply, status, new_state}
+    end
+  end
 
   @impl true
   def handle_cast(%GameMessage{action: :game_event} = msg, state) do
@@ -307,7 +308,8 @@ defmodule GamePlatform.GameServer do
 
   def handle_info({:server_event, {:player_disconnect_timeout, player_id}}, state) do
     Tracer.with_span :gs_player_disconnect_timeout, span_opts(state, [{:player_id, player_id}]) do
-      do_remove_player(player_id, state)
+      {_, new_state} = do_remove_player(player_id, state, :player_disconnect_timeout)
+      {:noreply, new_state}
     end
   end
 
@@ -328,37 +330,35 @@ defmodule GamePlatform.GameServer do
 
   # Remove the given player from the game.
   # This involves removing their monitors and connected lists, and cancelling any associated timeouts.
-  defp do_remove_player(player_id, state) do
+  defp do_remove_player(player_id, state, reason) do
     # Pop the player from relevant lists
-    monitor_ref = Enum.find(state.connected_player_monitors, fn {_, id} -> player_id == id end)
-    connected_player_monitors = Map.drop(state.connected_player_monitors, [monitor_ref])
-    connected_player_ids = MapSet.delete(state.connected_player_ids, player_id)
+    new_state = case Enum.find(state.connected_player_monitors, fn {_, id} -> player_id == id end) do
+      {monitor_ref, ^player_id} ->
+        # Stop monitoring if they're a connected player.
+        connected_player_monitors = Map.drop(state.connected_player_monitors, [monitor_ref])
+        connected_player_ids = MapSet.delete(state.connected_player_ids, player_id)
+        Process.demonitor(monitor_ref)
 
-    # Stop monitoring if they're a connected player.
-    unless monitor_ref |> is_nil(), do: Process.demonitor(monitor_ref)
-
-    new_state = state
-    |> Map.replace(:connected_player_monitors, connected_player_monitors)
-    |> Map.replace(:connected_player_ids, connected_player_ids)
-    |> cancel_player_timeout(player_id)
-    |> end_game_if_no_one_is_here()
+        state
+        |> Map.replace(:connected_player_monitors, connected_player_monitors)
+        |> Map.replace(:connected_player_ids, connected_player_ids)
+        |> cancel_player_timeout(player_id)
+        |> end_game_if_no_one_is_here()
+      nil ->
+        # We are removing a player that has already disconnected.
+        state
+    end
 
     # Tell the game state that this player is leaving.
-    case state.game_module.leave_game(new_state.game_state, player_id) do
+    case state.game_module.leave_game(new_state.game_state, player_id, reason) do
       {:ok, notifications, new_game_state} ->
         broadcast_pubsub(notifications, state)
-        # send_notifications(notifications, new_state)
 
-        {:noreply, %{new_state | game_state: new_game_state}}
+        {:ok, %{new_state | game_state: new_game_state}}
       {:error, _reason} ->
-        {:noreply, new_state}
+        {:error, new_state}
     end
   end
-
-  # defp send_notifications([], _), do: :ok
-  # defp send_notifications(notifications, state) do
-  #   Notification.send_all(notifications, state.game_id, state.server_config.pubsub)
-  # end
 
   defp broadcast_pubsub([], _), do: :ok
   defp broadcast_pubsub(msgs, state) do
