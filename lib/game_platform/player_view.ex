@@ -16,7 +16,7 @@ defmodule GamePlatform.PlayerView do
       not Game.is_game_alive?(game_id) ->
         socket = socket
         |> put_flash(:error, "Game with id #{game_id} does not exist")
-        |> redirect(to: "/select-game")
+        |> redirect(to: "/")
         {:ok, socket}
       connected?(socket) ->
         socket = socket
@@ -57,7 +57,7 @@ defmodule GamePlatform.PlayerView do
   def handle_info({:try_reconnect, attempts}, socket) when attempts >= 5 do
     socket = socket
     |> put_flash(:error, "Could not reconnect to server")
-    |> redirect(to: "/select-game")
+    |> redirect(to: "/")
 
     {:noreply, socket}
   end
@@ -122,7 +122,7 @@ defmodule GamePlatform.PlayerView do
     Tracer.with_span ctx, :pv_handle_shutdown, span_opts(socket, ctx) do
       socket = socket
       |> put_flash(:info, "Server has shut down")
-      |> redirect(to: "/select-game")
+      |> redirect(to: "/")
 
       {:noreply, socket}
     end
@@ -140,7 +140,7 @@ defmodule GamePlatform.PlayerView do
 
     socket = socket
     |> put_flash(:info, "Left game #{socket.assigns.game_id}")
-    |> redirect(to: "/select-game")
+    |> redirect(to: "/")
 
     {:noreply, socket}
   end

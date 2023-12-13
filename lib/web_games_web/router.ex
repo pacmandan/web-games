@@ -32,7 +32,6 @@ defmodule WebGamesWeb.Router do
     get "/games", PageController, :games_list
     get "/games/minesweeper", PageController, :minesweeper_form
     get "/join", PageController, :join_game
-    get "/select-game", SelectGameController, :select_game
     post "/new-game/minesweeper", NewGameController, :start_minesweeper
     post "/new-game/lightcycles", NewGameController, :start_lightcycles
   end

@@ -1,4 +1,4 @@
-<div class="max-w-lg mx-auto">
+<div class="max-w-xl mx-auto border-white border-4 p-4">
   <script type="text/javascript">
     // No, I'm not putting this into a separate file.
     // Locality of Behavior - keep everything about this form _here_!
@@ -10,17 +10,20 @@
       }
     }
 
-    function validateMinesweeper() {
-      //TODO: Add form validation
-      // When using custom, ensure the grid makes sense.
-      // (The number of squares is less than the number of mines, etc)
+    function setMaxMines() {
+      w = parseInt(document.getElementById("width").value);
+      h = parseInt(document.getElementById("height").value);
+
+      document.getElementById("num_mines").max = (w * h) - 1;
     }
   </script>
+  <h1 class="font-bold text-3xl text-white text-center">New Minesweeper Game</h1>
+  <hr />
   <form action="/new-game/minesweeper" method="post">
     <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()}/>
-    <div class="py-2">
-      <label class="text-white px-1" for="ms-gametype">Game Type:</label>
-      <select id="ms-gametype" name="type" onchange="changeType(this.options[this.selectedIndex].value)">
+    <div class="py-2 flex">
+      <label class="text-white px-4 min-w-fit self-center" for="ms-gametype">Game Type:</label>
+      <select id="ms-gametype" name="type" class="w-full" onchange="changeType(this.options[this.selectedIndex].value)">
         <option value="beginner">Beginner (9x9, 10 mines)</option>
         <option value="intermediate">Intermediate (16x16, 40 mines)</option>
         <option value="advanced">Advanced (30x16, 99 mines)</option>
@@ -30,13 +33,34 @@
     <div id="gridprops" style="display:none;" class="border-white border-2 py-2">
       <div class="p-2">
         <label for="width" class="text-white px-1">Width:</label>
-        <input type="number" min="1" max="99" name="width" id="width" value="10"/>
+        <input
+          class="invalid:border-2 invalid:border-red-500 invalid:border-dashed"
+          type="number"
+          min="1" max="99"
+          name="width" id="width"
+          value="10"
+          onchange="setMaxMines()"
+        />
         <label for="width" class="text-white px-1">Height:</label>
-        <input type="number" min="1" max="99" name="height" id="height" value="10"/>
+        <input
+          class="invalid:border-2 invalid:border-red-500 invalid:border-dashed"
+          type="number"
+          min="1" max="99"
+          name="height" id="height"
+          value="10"
+          onchange="setMaxMines()"
+        />
       </div>
       <div class="p-2">
         <label for="width" class="text-white px-1">Number of Mines:</label>
-        <input type="number" min="0" max="9999" name="num_mines" id="num_mines" value="10"/>
+        <input
+          class="invalid:border-2 invalid:border-red-500 invalid:border-dashed"
+          type="number"
+          min="0" max="9999"
+          name="num_mines"
+          id="num_mines"
+          value="10"
+        />
       </div>
     </div>
     <.button>Create Game</.button>

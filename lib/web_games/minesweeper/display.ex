@@ -1,6 +1,6 @@
 defmodule WebGames.Minesweeper.Display do
   def display_grid(game, cheat? \\ false) do
-    num_width_digits = num_digits(game.w - 1)
+    num_width_digits = num_digits(game.w)
     display_rows = Map.keys(game.grid)
     |> Enum.sort_by(fn {x, y} -> {y, x} end)
     |> Enum.map(fn space -> cell_to_string(game.grid[space], game.status, cheat?) end)
