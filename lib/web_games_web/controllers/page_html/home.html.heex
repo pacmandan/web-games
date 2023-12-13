@@ -1,1 +1,16 @@
-<div>HOME</div>
+<div class="flex flex-wrap justify-center">
+  <a href="/games" class="flex flex-col justify-center h-96 w-96 m-10 bg-slate-500 hover:bg-slate-400 border-white border-4 p-4">
+    <span class="text-white font-black text-6xl text-center">Create<br/>Game</span>
+  </a>
+  <div class="flex flex-col justify-center h-96 w-96 m-10 border-white border-4 p-4 bg-slate-700">
+    <span class="text-white font-black text-6xl text-center">Join Game</span>
+    <br/>
+    <form class="flex justify-center flex-col" action="/join">
+      <span class="w-full flex items-center mb-2">
+        <label class="text-white font-bold pr-2">Game&nbsp;ID:</label>
+        <input type="text" id="game_id" name="game_id"/>
+      </span>
+      <.button>Join</.button>
+    </form>
+  </div>
+</div>

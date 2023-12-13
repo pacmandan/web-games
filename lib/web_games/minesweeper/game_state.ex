@@ -10,6 +10,7 @@ defmodule WebGames.Minesweeper.GameState do
     start_time: nil,
     end_time: nil,
     game_type: nil,
+    end_game_ref: nil,
   ]
 
   @post_game_timeout :timer.minutes(2)
@@ -48,7 +49,7 @@ defmodule WebGames.Minesweeper.GameState do
         h: config.height,
         num_mines: config.num_mines,
         game_type: config.type,
-        grid: create_blank_grid(config),
+        grid: create_blank_grid(config.width, config.height),
       }
       # Display.display_grid(game)
       {:ok, game}
@@ -63,8 +64,8 @@ defmodule WebGames.Minesweeper.GameState do
     for x <- 1..width, y <- 1..height, do: {x, y}
   end
 
-  defp create_blank_grid(config) do
-    all_coords(config.width, config.height)
+  defp create_blank_grid(width, height) do
+    all_coords(width, height)
     |> Stream.map(fn coord -> {coord, %Cell{}} end)
     |> Enum.into(%{})
   end
@@ -124,28 +125,7 @@ defmodule WebGames.Minesweeper.GameState do
   # @decorate trace()
   def player_connected(game, player_id) do
     if player_id == game.player do
-      # Pre-calculate this so we don't do it inside the loop a bunch of times.
-      show_mines? = game.status in [:win, :lose]
-
-      # TODO: This could get expensive, maybe count as flags are placed?
-      num_flags = count_flags(game)
-
-      display_grid = Enum.map(game.grid, fn {coord, cell} ->
-        {coord, Cell.display(cell, show_mines?)}
-      end)
-      |> Enum.into(%{})
-
-      sync_data = %{
-        grid: display_grid,
-        width: game.w,
-        height: game.h,
-        num_mines: game.num_mines,
-        num_flags: num_flags,
-        status: game.status,
-        start_time: game.start_time,
-        end_time: game.end_time,
-        game_type: game.game_type,
-      }
+      sync_data = build_sync_data(game)
 
       {n, g} = game
       |> add_sync_notification({:player, player_id}, {:sync, sync_data})
@@ -155,6 +135,27 @@ defmodule WebGames.Minesweeper.GameState do
     else
       {:error, :unknown_player}
     end
+  end
+
+  @impl true
+  def handle_event(%__MODULE__{} = game, _, :restart) do
+    Process.cancel_timer(game.end_game_ref)
+
+    game = %__MODULE__{game |
+      grid: create_blank_grid(game.w, game.h),
+      status: :init,
+      start_time: nil,
+      end_time: nil,
+      end_game_ref: nil,
+    }
+
+    sync_data = build_sync_data(game)
+
+    {n, g} = game
+    |> add_sync_notification(:all, {:sync, sync_data})
+    |> take_notifications()
+
+    {:ok, n, g}
   end
 
   # If a game is over, do nothing.
@@ -196,6 +197,31 @@ defmodule WebGames.Minesweeper.GameState do
     # Display.display_grid(g, true)
 
     {:ok, n, g}
+  end
+
+  defp build_sync_data(game) do
+    # Pre-calculate this so we don't do it inside the loop a bunch of times.
+    show_mines? = game.status in [:win, :lose]
+
+    # TODO: This could get expensive, maybe count as flags are placed?
+    num_flags = count_flags(game)
+
+    display_grid = Enum.map(game.grid, fn {coord, cell} ->
+      {coord, Cell.display(cell, show_mines?)}
+    end)
+    |> Enum.into(%{})
+
+    %{
+      grid: display_grid,
+      width: game.w,
+      height: game.h,
+      num_mines: game.num_mines,
+      num_flags: num_flags,
+      status: game.status,
+      start_time: game.start_time,
+      end_time: game.end_time,
+      game_type: game.game_type,
+    }
   end
 
   defp click_cell(coord, game) do
@@ -264,13 +290,12 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   defp end_game(game, status) do
-    # TODO: Maybe in the future, allow for this game to "reset" to play again?
-    # In which case, we'd need to keep track of this ref to cancel it on reset.
-    GamePlatform.GameServer.end_game(@post_game_timeout)
+    end_game_ref = GamePlatform.GameServer.end_game(@post_game_timeout)
 
     end_time = DateTime.utc_now()
 
     game
+    |> Map.put(:end_game_ref, end_game_ref)
     |> Map.put(:status, status)
     |> Map.put(:end_time, end_time)
     |> add_notification(:all, {:game_over, %{status: status, end_time: end_time}})

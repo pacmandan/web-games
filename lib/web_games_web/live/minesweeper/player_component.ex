@@ -86,22 +86,12 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     |> render_cells(Map.keys(cells))
   end
 
-  defp process_msg({:game_over, %{status: :lose, end_time: time}}, socket) do
+  defp process_msg({:game_over, %{status: status, end_time: time}}, socket) do
     socket
-    |> assign(:status, :lose)
-    |> assign(:display_status, "BOOM!")
+    |> assign(:status, status)
     |> assign(:end_time, time)
-    |> assign(:clicks_enabled?, false)
-    |> update_timer()
-    |> render_full_grid()
-  end
-
-  defp process_msg({:game_over, %{status: :win, end_time: time}}, socket) do
-    socket
-    |> assign(:status, :win)
-    |> assign(:display_status, "WIN!")
-    |> assign(:end_time, time)
-    |> assign(:clicks_enabled?, false)
+    |> set_display_status()
+    |> set_clicks_enabled()
     |> update_timer()
     |> render_full_grid()
   end
@@ -110,6 +100,8 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     socket
     |> assign(data)
     |> coerce_game_type()
+    |> set_display_status()
+    |> set_clicks_enabled()
     |> update_timer()
     |> render_full_grid()
   end
@@ -153,6 +145,13 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     {:noreply, socket}
   end
 
+  @impl true
+  def handle_event("restart", _, socket) do
+    Game.send_event(:restart, socket.assigns[:player_id], socket.assigns[:game_id])
+
+    {:noreply, socket}
+  end
+
   defp coerce_game_type(%{assigns: %{game_type: type}} = socket) when type |> is_atom() do
     socket
     |> assign(:game_type, type |> Atom.to_string() |> String.capitalize())
@@ -161,6 +160,26 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
   defp coerce_game_type(%{assigns: %{game_type: type}} = socket) when type |> is_binary() do
     socket
     |> assign(:game_type, type |> String.capitalize())
+  end
+
+  defp set_display_status(%{assigns: %{status: :win}} = socket) do
+    socket
+    |> assign(:display_status, "WIN!")
+  end
+
+  defp set_display_status(%{assigns: %{status: :lose}} = socket) do
+    socket
+    |> assign(:display_status, "BOOM!")
+  end
+
+  defp set_display_status(socket) do
+    socket
+    |> assign(:display_status, nil)
+  end
+
+  defp set_clicks_enabled(%{assigns: %{status: status}} = socket) do
+    socket
+    |> assign(:clicks_enabled?, status not in [:win, :lose])
   end
 
   defp render_cells(socket, coords) do

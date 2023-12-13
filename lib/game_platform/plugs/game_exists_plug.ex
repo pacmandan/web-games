@@ -9,7 +9,7 @@ defmodule GamePlatform.Plugs.GameExistsPlug do
       conn
     else
       conn
-      |> put_resp_header("location", "/select-game")
+      |> put_resp_header("location", "/")
       |> resp(Plug.Conn.Status.code(:found), "The game you are trying to connect to does not exist.")
     end
   end
