@@ -168,9 +168,15 @@ defmodule GamePlatform.PlayerView do
   def render(assigns) do
     ~H"""
     <div>
-      <div class="pb-10 text-slate-400" >
-        <%= @game_info.display_name %> - [<.connection_state_string connection_state={@connection_state} />]
-        <.button phx-click="leave_game">Leave Game</.button>
+      <div class="flex justify-between pb-10">
+        <span class="text-slate-400 font-bold text-lg">GAME ID:&nbsp;
+          <h3 class="inline text-white font-extrabold text-2xl"><%= @game_id %></h3>
+          <!-- <p class="text-sm">Other players can join using this ID</p> -->
+        </span>
+        <div class="text-slate-400" >
+          <%= @game_info.display_name %> - [<.connection_state_string connection_state={@connection_state} />]
+          <.button phx-click="leave_game">Leave Game</.button>
+        </div>
       </div>
       <.live_component module={@game_info.view_module}
         id={@game_id} game_id={@game_id} player_id={@player_id} />
