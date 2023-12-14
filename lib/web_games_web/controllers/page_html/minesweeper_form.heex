@@ -1,12 +1,19 @@
-<div class="max-w-xl mx-auto border-white border-4 p-4">
+<div class="max-w-xl mx-auto border-white border-4 p-4 rounded-lg">
   <script type="text/javascript">
     // No, I'm not putting this into a separate file.
     // Locality of Behavior - keep everything about this form _here_!
     function changeType(newType) {
       if (newType === "custom") {
         document.getElementById("gridprops").style.display = "block";
+        document.getElementById("height").disabled = false;
+        document.getElementById("width").disabled = false;
+        document.getElementById("num_mines").disabled = false;
+        setMaxMines()
       } else {
         document.getElementById("gridprops").style.display = "none";
+        document.getElementById("height").disabled = true;
+        document.getElementById("width").disabled = true;
+        document.getElementById("num_mines").disabled = true;
       }
     }
 
@@ -30,7 +37,7 @@
         <option value="custom">Custom Game</option>
       </select>
     </div>
-    <div id="gridprops" style="display:none;" class="border-white border-2 py-2">
+    <div id="gridprops" style="display:none;" class="border-white border-2 py-2 rounded-md">
       <div class="p-2">
         <label for="width" class="text-white px-1">Width:</label>
         <input
