@@ -172,7 +172,9 @@ defmodule WebGames.Minesweeper.GameState do
     |> update_status()
     |> take_notifications()
 
-    Display.display_grid(g, true)
+    if Mix.env() === :dev do
+      Display.display_grid(g, true)
+    end
 
     {:ok, n, g}
   end

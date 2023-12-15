@@ -59,6 +59,8 @@ defmodule WebGames.MixProject do
       {:opentelemetry_exporter, "~> 1.6"},
       {:opentelemetry_phoenix, "~> 1.1"},
       {:opentelemetry_cowboy, "~> 0.2"},
+      {:logger_json, "~> 5.0"},
+      {:ex_doc, "~> 0.21", only: :dev, runtime: false},
     ]
   end
 

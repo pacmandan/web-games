@@ -8,7 +8,7 @@ import Config
 config :web_games, WebGamesWeb.Endpoint, cache_static_manifest: "priv/static/cache_manifest.json"
 
 # Do not print debug messages in production
-config :logger, level: :info
+config :logger, level: :info, backends: [LoggerJSON]
 
 config :web_games, :telemetry,
   reporter_type: :statsd
