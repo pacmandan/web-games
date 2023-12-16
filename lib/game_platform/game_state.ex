@@ -71,12 +71,18 @@ defmodule GamePlatform.GameState do
   @callback handle_game_shutdown(game_state()) :: {:ok, msgs(), game_state()}
 
   defmodule GameInfo do
+    @moduledoc """
+    Struct containing information about the game, used for things like
+    passing this module into the game view.
+    """
+
     @enforce_keys [:server_module, :view_module, :display_name]
     defstruct [
       :server_module,
       :view_module,
       :display_name,
     ]
+
     @type t :: %__MODULE__{
       server_module: module(),
       view_module: module(),
@@ -104,6 +110,7 @@ defmodule GamePlatform.GameState do
 
         {:ok, info}
       end
+
       defoverridable GamePlatform.GameState
     end
   end

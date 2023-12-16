@@ -3,32 +3,12 @@ defmodule GamePlatform.GameServer do
   Generic game server that runs game implementations.
   """
 
-  defmodule GameMessage do
-    defstruct [
-      :action,
-      :payload,
-      :from,
-      :ctx,
-    ]
-
-    @type action ::
-      :player_join
-      | :player_connected
-      | :game_event
-
-    @type t :: %__MODULE__{
-      action: action(),
-      payload: term(),
-      ctx: OpenTelemetry.Ctx.t(),
-    }
-  end
-
-  alias GamePlatform.PubSubMessage
-  # alias GamePlatform.Notification
   use GenServer, restart: :transient
 
   require Logger
   require OpenTelemetry.Tracer, as: Tracer
+
+  alias GamePlatform.PubSubMessage
 
   @default_server_config %{
     game_timeout_length: :timer.minutes(30),
@@ -49,7 +29,34 @@ defmodule GamePlatform.GameServer do
     player_timeout_refs: %{String.t() => reference()},
   }
 
+  defmodule GameMessage do
+    @moduledoc """
+    Structure representing a packaged message _to_ the game server.
+    """
+    defstruct [
+      :action,
+      :payload,
+      :from,
+      :ctx,
+    ]
+
+    @type action ::
+      :player_join
+      | :player_connected
+      | :game_event
+
+    @type t :: %__MODULE__{
+      action: action(),
+      payload: term(),
+      from: String.t() | atom() | nil,
+      ctx: OpenTelemetry.Ctx.t(),
+    }
+  end
+
   @doc """
+  This is the start_link() function called by GenServer when creating a
+  new process.
+
   To start a game, it needs the following:
   - A game ID to register itself under. This should be a 4-letter string.
   - A game spec, consisting of a module that implements GameState, and a
@@ -103,6 +110,7 @@ defmodule GamePlatform.GameServer do
   end
 
   @impl true
+  @spec handle_continue(:init_game, state_t()) :: {:noreply, state_t()}
   def handle_continue(:init_game, state) do
     Tracer.with_span :gs_init_game, span_opts(state) do
       # TODO: Handle error in game state init
@@ -435,7 +443,7 @@ defmodule GamePlatform.GameServer do
     # Since no one is here, end the game sooner rather than later.
     if state.connected_player_ids == MapSet.new() do
       # Do it as a game timeout, in case a player re-joins.
-      # That way, when if a player _does_ decide to come back, it resets automatically.
+      # That way, if a player _does_ decide to come back, it resets automatically.
       schedule_game_timeout(state, :timer.minutes(1))
     else
       state
