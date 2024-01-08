@@ -5,7 +5,7 @@ defmodule WebGames.MixProject do
     [
       app: :web_games,
       version: "0.1.0",
-      elixir: "~> 1.14",
+      elixir: "~> 1.16",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -61,6 +61,7 @@ defmodule WebGames.MixProject do
       {:opentelemetry_cowboy, "~> 0.2"},
       {:logger_json, "~> 5.0"},
       {:ex_doc, "~> 0.21", only: :dev, runtime: false},
+      {:mock, "~> 0.3.0", only: :test},
     ]
   end
 
