@@ -1,4 +1,8 @@
 defmodule GamePlatform.PlayerComponent do
+  @moduledoc """
+  Game-specific component behaviour. Should be implemented
+  by the LiveComponent for each specific game.
+  """
   @callback handle_game_event(
     socket :: Phoenix.LiveView.Socket.t(),
     payload :: term()

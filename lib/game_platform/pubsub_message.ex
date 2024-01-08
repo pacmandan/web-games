@@ -10,6 +10,7 @@ defmodule GamePlatform.PubSubMessage do
   @type topic_ref ::
     :all
     | :audience
+    | :players
     | {:player, String.t()}
     | {:team, String.t()}
     | any()
@@ -19,7 +20,7 @@ defmodule GamePlatform.PubSubMessage do
     from: String.t() | nil,
     to: topic_ref(),
     ctx: OpenTelemetry.Ctx.t() | nil,
-    type: :game_event | :sync | :shutdown,
+    type: :game_event | :server_event | :sync | :shutdown,
   }
 
   def build(to, payload, type \\ :game_event) do
@@ -69,6 +70,7 @@ defmodule GamePlatform.PubSubMessage do
   end
 
   def get_topic(:all, game_id), do: "game:#{game_id}"
+  def get_topic(:players, game_id), do: "game:#{game_id}:players"
   def get_topic(:audience, game_id), do: "game:#{game_id}:audience"
   def get_topic({:player, player_id}, game_id), do: "game:#{game_id}:player:#{player_id}"
   def get_topic({:team, team_id}, game_id), do: "game:#{game_id}:team:#{team_id}"

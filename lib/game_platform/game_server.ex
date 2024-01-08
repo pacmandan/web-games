@@ -11,7 +11,7 @@ defmodule GamePlatform.GameServer do
   alias GamePlatform.PubSubMessage
 
   @default_server_config %{
-    game_timeout_length: :timer.minutes(30),
+    game_timeout_length: :timer.minutes(5),
     player_disconnect_timeout_length: :timer.minutes(2),
   }
 
@@ -97,7 +97,6 @@ defmodule GamePlatform.GameServer do
       game_config: game_config,
       game_state: nil,
       start_time: DateTime.utc_now(),
-      start_time_mono: System.monotonic_time(),
       server_config: server_config,
       timeout_ref: nil,
       # TODO: Look more into Phoenix.Presence and Phoenix.Tracker to see if it could replace or augment this.
@@ -112,46 +111,63 @@ defmodule GamePlatform.GameServer do
   @impl true
   @spec handle_continue(:init_game, state_t()) :: {:noreply, state_t()}
   def handle_continue(:init_game, state) do
+    Logger.info("Game #{state.game_id} initializing game state...", state_metadata(state))
     Tracer.with_span :gs_init_game, span_opts(state) do
-      # TODO: Handle error in game state init
       # Initialize the game state using the provided "game_config".
+      # If this fails, it will crash the game server process.
+      # For now, this is fine, as the game will simply fail to start.
+      # However, it will give a weird error in the UI and not say why a game
+      # didn't start. (It'll just say "game does not exist".)
+      # TODO: Do a better job of communicating startup failures in the UI.
       {:ok, game_state} = state.game_module.init(state.game_config)
 
       new_state = state
       |> Map.put(:game_state, game_state)
       |> schedule_game_timeout()
 
-      # emit_game_start(state)
-
+      Logger.info("Game #{new_state.game_id} successfully initialized!", state_metadata(new_state))
       {:noreply, new_state}
     end
   end
 
   @impl true
   def handle_call(%GameMessage{action: :player_join} = msg, _from, state) do
+    Logger.info("Game #{state.game_id} player #{msg.from} attempting to join...", state_metadata(state, player_id: msg.from, msg: msg))
     Tracer.with_span :gs_join_game, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
       # Tell the game server a player is attempting to join.
+      # Players will ALWAYS join "game:<game_id>" and "game:<game_id>:player:<player_id>".
+      # Anything else is added by the game itself.
+      # e.g. "game:<game_id>:players", "game:<game_id>:team:<team_id>",
+      # "game:<game_id>:audience", etc.
+
+      default_topics = [:all, {:player, msg.from}]
+
       case state.game_module.join_game(state.game_state, msg.from) do
         # A player joined the state, tell everyone about it.
-        {:ok, topic_refs, notifications, new_game_state} ->
-          # send_notifications(notifications, state)
-          broadcast_pubsub(notifications, state)
-          # TODO: Should we cache these in the server state? (per-player?)
+        {:ok, topic_refs, msgs, new_game_state} ->
+          # TODO: Broadcast player join to all connected players automatically.
+          # Right now it's on the individual games to handle that part.
+          broadcast_pubsub(msgs, state)
           # TODO: Send the topic refs instead of the topics
           # The "subscribe" function should live in the Notification module,
           # and should automatically translate refs to topic strings.
-          topics = Enum.map(topic_refs, &(PubSubMessage.get_topic(&1, state.game_id)))
+          topics = topic_refs
+          |> Enum.concat(default_topics)
+          |> Enum.uniq()
+          |> Enum.map(&(PubSubMessage.get_topic(&1, state.game_id)))
 
           new_state = state
           |> Map.put(:game_state, new_game_state)
           |> schedule_game_timeout()
 
+          Logger.info("Game #{new_state.game_id} player #{msg.from} successfully joined, given topics #{inspect(topics)}", state_metadata(new_state, player_id: msg.from, msg: msg, topics: topics))
+
           {:reply, {:ok, topics}, new_state}
 
         # The player was rejected for some reason.
-        # Log it, but no need to send notifications.
+        # Log it, but no need to send msgs.
         {:error, reason} ->
-          # TODO: Log error
+          Logger.error("Game #{state.game_id} rejected player #{msg.from} for reason: #{inspect(reason)}", state_metadata(state, player_id: msg.from, msg: msg, err: reason))
           {:reply, {:error, reason}, state}
       end
     end
@@ -159,6 +175,7 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_call(:game_info, _from, state) do
+    Logger.info("Game #{state.game_id} game info called.", state_metadata(state))
     Tracer.with_span :gs_game_info, span_opts(state) do
       # Return the game module this server is running.
       {:reply, state.game_module.game_info(), state}
@@ -167,6 +184,7 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_call(%GameMessage{action: :player_leave} = msg, _from, state) do
+    Logger.info("Game #{state.game_id} player #{msg.from} leaving game...", state_metadata(state, player_id: msg.from, msg: msg))
     Tracer.with_span :gs_player_leave, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
       {status, new_state} = do_remove_player(msg.from, state, :manual)
       {:reply, status, new_state}
@@ -175,25 +193,28 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_cast(%GameMessage{action: :game_event} = msg, state) do
+    Logger.info("Game #{state.game_id} recieved an event from player #{msg.from}.", state_metadata(state, player_id: msg.from, msg: msg, event: msg.payload))
     # Not sure if "event" should be included here?
     # Maybe that should be up to the implementation to add?
     Tracer.with_span :gs_game_event, span_opts(state, [{:player_id, msg.from}, {:event, msg.payload |> inspect()}], msg.ctx) do
       # Only handle events from connected players.
       with true <- MapSet.member?(state.connected_player_ids, msg.from),
-        {:ok, notifications, new_game_state} <- state.game_module.handle_event(state.game_state, msg.from, msg.payload)
+        {:ok, msgs, new_game_state} <- state.game_module.handle_event(state.game_state, msg.from, msg.payload)
       do
         new_state = state
         |> Map.replace(:game_state, new_game_state)
         |> schedule_game_timeout()
 
-        # send_notifications(notifications, state)
-        broadcast_pubsub(notifications, state)
+        broadcast_pubsub(msgs, state)
 
         {:noreply, new_state}
       else
+        false ->
+          # Ignore - we got a message from an unconnected player.
+          Logger.warning("Game #{state.game_id} got a :game_event from an unconnected player, #{msg.from}.", state_metadata(state, player_id: msg.from, msg: msg, event: msg.payload))
+          {:noreply, state}
         _error ->
           # TODO: Log error
-          # Need to interpret this - can be either "false" or {:error, reason}
           {:noreply, state}
       end
     end
@@ -201,24 +222,27 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_cast(%GameMessage{action: :player_connected} = msg, state) do
+    Logger.info("Game #{state.game_id} player #{msg.from} attempting to connect...", state_metadata(state, player_id: msg.from, msg: msg))
     Tracer.with_span :gs_player_connected, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
       # Just in case this is a previously disconnected player,
       # cancel their timeout.
       state = state |> cancel_player_timeout(msg.from)
 
       case state.game_module.player_connected(state.game_state, msg.from) do
-        {:ok, notifications, new_game_state} ->
+        {:ok, msgs, new_game_state} ->
           # Monitor connected player to see if/when they disconnect
           new_state = state
           |> Map.replace(:connected_player_monitors, Map.put(state.connected_player_monitors, Process.monitor(msg.payload[:pid]), msg.from))
           |> Map.replace(:connected_player_ids, MapSet.put(state.connected_player_ids, msg.from))
           |> Map.replace(:game_state, new_game_state)
 
-          # send_notifications(notifications, new_state)
-          broadcast_pubsub(notifications, state)
+          broadcast_pubsub(msgs, new_state)
+
+          Logger.info("Game #{new_state.game_id} player #{msg.from} connected successfully!", state_metadata(new_state, player_id: msg.from, msg: msg))
           {:noreply, new_state}
 
-        {:error, _reason} ->
+        {:error, reason} ->
+          Logger.error("Game #{state.game_id} failed to connect player #{msg.from} for reason: #{inspect(reason)}.", state_metadata(state, player_id: msg.from, msg: msg, err: reason))
           {:noreply, state}
       end
     end
@@ -227,6 +251,7 @@ defmodule GamePlatform.GameServer do
   # This should be triggered by the monitors on connected players.
   @impl true
   def handle_info({:DOWN, ref, :process, _object, _reason}, state) do
+    Logger.info("Game #{state.game_id} player disconnect message received!", state_metadata(state, ref: ref))
     Tracer.with_span :gs_player_disconnected, span_opts(state) do
       # Oh no! A player has disconnected!
       # Pop their monitor from connected players.
@@ -243,20 +268,25 @@ defmodule GamePlatform.GameServer do
 
       if player_id |> is_nil() do
         # Nevermind, this is probably not actually a connected player.
+        Logger.warning("Game #{state.game_id} disconnect message recieved from player that doesn't exist or has already disconnected.", state_metadata(state, ref: ref))
         {:noreply, state}
       else
         # Tell the game state that a player has disconnected
         case state.game_module.player_disconnected(state.game_state, player_id) do
-          {:ok, notifications, new_game_state} ->
+          {:ok, msgs, new_game_state} ->
             new_state = state
             |> Map.replace(:game_state, new_game_state)
 
-            # send_notifications(notifications, new_state)
-            broadcast_pubsub(notifications, state)
+            broadcast_pubsub(msgs, new_state)
+
+            Logger.info("Game #{state.game_id} player #{player_id} disconneced successfully.", state_metadata(state, ref: ref, player_id: player_id))
             {:noreply, new_state}
 
-          {:error, _reason} ->
+          {:error, reason} ->
             # There was an error updating the state.
+            # Should this be inverted? Updating the game state first, then
+            # the server state?
+            Logger.error("Game #{state.game_id} failed to disconnect player #{player_id} for reason: #{inspect(reason)}", state_metadata(state, player_id: player_id, err: reason))
             {:noreply, state}
         end
       end
@@ -270,7 +300,7 @@ defmodule GamePlatform.GameServer do
     # TODO: I'm not sure if this one should be traced, since it encompasses
     # real-time ticks. Might slow things down, and clutter results...
     case state.game_module.handle_event(state.game_state, :game, event) do
-      {:ok, notifications, new_game_state} ->
+      {:ok, msgs, new_game_state} ->
         # Internal game events do not reset the timer.
         # Process.cancel_timer(state.timeout_ref)
         # new_timeout_ref = schedule_game_timeout(state)
@@ -279,8 +309,7 @@ defmodule GamePlatform.GameServer do
         |> Map.replace(:game_state, new_game_state)
         # |> Map.replace(:timeout_ref, new_timeout_ref)
 
-        # send_notifications(notifications, new_state)
-        broadcast_pubsub(notifications, state)
+        broadcast_pubsub(msgs, state)
 
         {:noreply, new_state}
 
@@ -299,22 +328,21 @@ defmodule GamePlatform.GameServer do
   # :game_timeout happens at the server level, and represents an idle timeout where nothing has happened.
 
   def handle_info({:server_event, :end_game}, state) do
+    Logger.info("Game #{state.game_id} told to end normally...", state_metadata(state))
     Tracer.with_span :gs_end_game, span_opts(state, [{:reason, "end_game"}]) do
-      Logger.info("Game #{state.game_id} has ended normally")
-      # emit_game_stop(state, :normal)
       halt_game(state)
     end
   end
 
   def handle_info({:server_event, :game_timeout}, state) do
+    Logger.info("Game #{state.game_id} has timed out due to inactivity...", state_metadata(state))
     Tracer.with_span :gs_end_game, span_opts(state, [{:reason, "game_timeout"}]) do
-      Logger.info("Game #{state.game_id} has timed out due to inactivity")
-      # emit_game_stop(state, :game_timeout)
       halt_game(state)
     end
   end
 
   def handle_info({:server_event, {:player_disconnect_timeout, player_id}}, state) do
+    Logger.info("Game #{state.game_id} player #{player_id} has disconnected and timed out!", state_metadata(state, player_id: player_id))
     Tracer.with_span :gs_player_disconnect_timeout, span_opts(state, [{:player_id, player_id}]) do
       {_, new_state} = do_remove_player(player_id, state, :player_disconnect_timeout)
       {:noreply, new_state}
@@ -322,7 +350,8 @@ defmodule GamePlatform.GameServer do
   end
 
   defp halt_game(state) do
-    {:ok, notifications, new_game_state} = state.game_module.handle_game_shutdown(state.game_state)
+    Logger.info("Game #{state.game_id} halting game...", state_metadata(state))
+    {:ok, msgs, new_game_state} = state.game_module.handle_game_shutdown(state.game_state)
 
     new_state = state
     |> Map.replace(:game_state, new_game_state)
@@ -331,8 +360,9 @@ defmodule GamePlatform.GameServer do
     # We'd need to know what topics to send to.
     # So we'd either need a "universal" channel outside of what the
     # game uses, or keep track of the channels the game uses.
-    # send_notifications(notifications, new_state)
-    broadcast_pubsub(notifications, state)
+    broadcast_pubsub(msgs, state)
+
+    Logger.info("Game #{state.game_id} halted successfully!", state_metadata(state))
     {:stop, :normal, new_state}
   end
 
@@ -340,6 +370,7 @@ defmodule GamePlatform.GameServer do
   # This involves removing their monitors and connected lists, and cancelling any associated timeouts.
   defp do_remove_player(player_id, state, reason) do
     # Pop the player from relevant lists
+    Logger.info("Game #{state.game_id} removing player #{player_id}...", state_metadata(state, player_id: player_id, reason: reason))
     new_state = case Enum.find(state.connected_player_monitors, fn {_, id} -> player_id == id end) do
       {monitor_ref, ^player_id} ->
         # Stop monitoring if they're a connected player.
@@ -354,16 +385,21 @@ defmodule GamePlatform.GameServer do
         |> end_game_if_no_one_is_here()
       nil ->
         # We are removing a player that has already disconnected.
+        Logger.warning("Game #{state.game_id} attempted to remove player #{player_id} that wasn't connected.", state_metadata(state, player_id: player_id, reason: reason))
         state
     end
 
     # Tell the game state that this player is leaving.
     case state.game_module.leave_game(new_state.game_state, player_id, reason) do
-      {:ok, notifications, new_game_state} ->
-        broadcast_pubsub(notifications, state)
+      {:ok, msgs, new_game_state} ->
+        broadcast_pubsub(msgs, state)
 
         {:ok, %{new_state | game_state: new_game_state}}
-      {:error, _reason} ->
+      {:error, err} ->
+        # The game state has failed somehow. But we've already removed this player.
+        # Do we want to invert this, only removing the player if the game
+        # state removal is successful?
+        Logger.error("Game #{new_state.game_id} failed to remove player #{player_id} from game state for reason: #{inspect(err)}.", state_metadata(state, player_id: player_id, err: err))
         {:error, new_state}
     end
   end
@@ -372,6 +408,18 @@ defmodule GamePlatform.GameServer do
   defp broadcast_pubsub(msgs, state) do
     PubSubMessage.broadcast_all(msgs, state.game_id, state.server_config.pubsub)
   end
+
+  # defp broadcast_all_players(payload, state) do
+  #   PubSubMessage.build(:all, payload, :server_event)
+  #   |> List.wrap()
+  #   |> broadcast_pubsub(state)
+  # end
+
+  # defp broadcast_player(payload, player_id, state) do
+  #   PubSubMessage.build({:player, player_id}, payload, :server_event)
+  #   |> List.wrap()
+  #   |> broadcast_pubsub(state)
+  # end
 
   # This should be called when a player has disconnected.
   # After a timeout, this will call back to itself with `{:player_disconnect_timeout, player_id}`,
@@ -411,6 +459,13 @@ defmodule GamePlatform.GameServer do
     }
   end
 
+  defp state_metadata(state, extra_attrs \\ []) do
+    %{
+      game_id: state.game_id,
+      game_module: state.game_module,
+    } |> Map.merge(Enum.into(extra_attrs, %{}))
+  end
+
   # Cancels the players disconnect timeout, usually because that player has reconnected.
   defp cancel_player_timeout(state, player_id) do
     {timer_ref, player_timeout_refs} = Map.pop(state.player_timeout_refs, player_id)
@@ -432,6 +487,7 @@ defmodule GamePlatform.GameServer do
   # Breaking it out like this lets us do things like setting the timeout to a lower number after all players have left.
   defp schedule_game_timeout(state), do: schedule_game_timeout(state, state.server_config.game_timeout_length)
   defp schedule_game_timeout(state, millis) when is_integer(millis) do
+    Logger.info("Game #{state.game_id} scheduling game timeout in #{millis} ms.", state_metadata(state))
     timer_ref = send_self_server_event(:game_timeout, millis)
     state
     |> cancel_game_timeout()
@@ -444,6 +500,7 @@ defmodule GamePlatform.GameServer do
     if state.connected_player_ids == MapSet.new() do
       # Do it as a game timeout, in case a player re-joins.
       # That way, if a player _does_ decide to come back, it resets automatically.
+      Logger.info("Game #{state.game_id}, no one is here, scheduling game timeout in 60s.", state_metadata(state))
       schedule_game_timeout(state, :timer.minutes(1))
     else
       state

@@ -10,12 +10,17 @@ defmodule WebGamesWeb.NewGameController do
 
     # TODO: Handle config validation
     minesweeper_config = Minesweeper.Config.custom(width, height, num_mines)
-    {:ok, game_id, _} = WebGames.start_minesweeper(player_id, minesweeper_config)
 
-    conn
-    |> put_session("game_id", game_id)
-    |> put_session("player_id", player_id)
-    |> redirect(to: "/play/#{game_id}")
+    if Minesweeper.Config.valid?(minesweeper_config) do
+      {:ok, game_id, _} = WebGames.start_minesweeper(player_id, minesweeper_config)
+
+      conn
+      |> put_session("player_id", player_id)
+      |> redirect(to: "/play/#{game_id}")
+    else
+      conn
+      |> send_resp(400, "Invalid config")
+    end
   end
 
   def start_minesweeper(conn, %{"type" => type}) do
@@ -31,7 +36,6 @@ defmodule WebGamesWeb.NewGameController do
     {:ok, game_id, _} = WebGames.start_minesweeper(player_id, minesweeper_config)
 
     conn
-    |> put_session("game_id", game_id)
     |> put_session("player_id", player_id)
     |> redirect(to: "/play/#{game_id}")
   end
@@ -42,7 +46,6 @@ defmodule WebGamesWeb.NewGameController do
     {:ok, game_id, _} = WebGames.start_lightcycles(player_id, %{width: 100, height: 100})
 
     conn
-    |> put_session("game_id", game_id)
     |> put_session("player_id", player_id)
     |> redirect(to: "/play/#{game_id}")
   end
