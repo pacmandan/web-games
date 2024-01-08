@@ -75,7 +75,7 @@ defmodule WebGames.LightCycles.GameState do
     }
 
     # TODO: Remove to allow multiplayer!
-    GameServer.send_self_game_event(:start_game, 1500)
+    GameServer.InternalComms.schedule_game_event(:start_game, 1500)
 
     {:ok, state}
   end
@@ -293,7 +293,7 @@ defmodule WebGames.LightCycles.GameState do
       #   |> add_notification(:all, {:winner, winner_id})
       0 ->
         # Tie
-        GameServer.end_game(:timer.minutes(2))
+        GameServer.InternalComms.schedule_end_game(:timer.minutes(2))
         new_state
         |> add_notification(:all, :draw)
         |> pause_game()
@@ -356,10 +356,10 @@ defmodule WebGames.LightCycles.GameState do
   end
 
   defp schedule_countdown() do
-    GameServer.send_self_game_event({:countdown, 3}, :timer.seconds(1))
-    GameServer.send_self_game_event({:countdown, 2}, :timer.seconds(2))
-    GameServer.send_self_game_event({:countdown, 1}, :timer.seconds(3))
-    GameServer.send_self_game_event({:countdown, 0}, :timer.seconds(4))
+    GameServer.InternalComms.schedule_game_event({:countdown, 3}, :timer.seconds(1))
+    GameServer.InternalComms.schedule_game_event({:countdown, 2}, :timer.seconds(2))
+    GameServer.InternalComms.schedule_game_event({:countdown, 1}, :timer.seconds(3))
+    GameServer.InternalComms.schedule_game_event({:countdown, 0}, :timer.seconds(4))
   end
 
   defp turn_player(%{next_turn: nil} = player_state), do: player_state
