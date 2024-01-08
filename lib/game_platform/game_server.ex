@@ -9,6 +9,7 @@ defmodule GamePlatform.GameServer do
   require OpenTelemetry.Tracer, as: Tracer
 
   alias GamePlatform.PubSubMessage
+  alias GamePlatform.GameServer.InternalComms
 
   @default_server_config %{
     game_timeout_length: :timer.minutes(5),
@@ -302,7 +303,7 @@ defmodule GamePlatform.GameServer do
     case state.game_module.handle_event(state.game_state, :game, event) do
       {:ok, msgs, new_game_state} ->
         # Internal game events do not reset the timer.
-        # Process.cancel_timer(state.timeout_ref)
+        # InternalComms.cancel_scheduled_message(state.timeout_ref)
         # new_timeout_ref = schedule_game_timeout(state)
 
         new_state = state
@@ -434,7 +435,7 @@ defmodule GamePlatform.GameServer do
   # Dropping this case, since due to how the config validation works right now, it's impossible.
   # defp schedule_player_timeout(state, _player_id, :infinity), do: state
   defp schedule_player_timeout(state, player_id, millis) when is_integer(millis) do
-    timer_ref = send_self_server_event({:player_disconnect_timeout, player_id}, millis)
+    timer_ref = InternalComms.schedule_player_disconnect_timeout(player_id, millis)
     state
     |> cancel_player_timeout(player_id)
     |> put_in([:player_timeout_refs, player_id], timer_ref)
@@ -470,14 +471,14 @@ defmodule GamePlatform.GameServer do
   defp cancel_player_timeout(state, player_id) do
     {timer_ref, player_timeout_refs} = Map.pop(state.player_timeout_refs, player_id)
 
-    unless timer_ref |> is_nil(), do: Process.cancel_timer(timer_ref)
+    unless timer_ref |> is_nil(), do: InternalComms.cancel_scheduled_message(timer_ref)
 
     Map.replace(state, :player_timeout_refs, player_timeout_refs)
   end
 
   # Cancels the internal game timeout
   defp cancel_game_timeout(state) do
-    unless state.timeout_ref |> is_nil(), do: Process.cancel_timer(state.timeout_ref)
+    unless state.timeout_ref |> is_nil(), do: InternalComms.cancel_scheduled_message(state.timeout_ref)
     # Map.put(state, :timeout_ref, nil)
     state
   end
@@ -488,7 +489,7 @@ defmodule GamePlatform.GameServer do
   defp schedule_game_timeout(state), do: schedule_game_timeout(state, state.server_config.game_timeout_length)
   defp schedule_game_timeout(state, millis) when is_integer(millis) do
     Logger.info("Game #{state.game_id} scheduling game timeout in #{millis} ms.", state_metadata(state))
-    timer_ref = send_self_server_event(:game_timeout, millis)
+    timer_ref = InternalComms.schedule_game_timeout(millis)
     state
     |> cancel_game_timeout()
     |> Map.put(:timeout_ref, timer_ref)
@@ -505,26 +506,5 @@ defmodule GamePlatform.GameServer do
     else
       state
     end
-  end
-
-  @doc """
-  Sends a game event to itself.
-
-  This is useful for internal game events not triggered by any particular players.
-  (e.g. A timeout on a players turn, a tick to progress a real-time game, etc.)
-
-  In the context of the game state, these are handled like normal events, except
-  the "player_id" is set to `:game`.
-  """
-  def send_self_game_event(event, time \\ 0) do
-    Process.send_after(self(), {:game_event, event}, time)
-  end
-
-  defp send_self_server_event(event, time) do
-    Process.send_after(self(), {:server_event, event}, time)
-  end
-
-  def end_game(after_millis \\ 0) do
-    send_self_server_event(:end_game, after_millis)
   end
 end

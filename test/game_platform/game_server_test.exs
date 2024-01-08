@@ -5,6 +5,7 @@ defmodule GamePlatform.GameServerTest do
   import Mock
 
   alias GamePlatform.GameServer
+  alias GamePlatform.GameServer.InternalComms
   alias GamePlatform.MockGameState
 
   @doc """
@@ -37,12 +38,17 @@ defmodule GamePlatform.GameServerTest do
   setup_with_mocks([
     {MockGameState, [:passthrough], []},
     # FIXME: Can't mock Process, refactor calls to another mockable module.
-    {Process, [], [
-      send_after: fn(_, _, _) ->
-        IO.inspect("MOCK SEND AFTER!!!")
+    {InternalComms, [], [
+      schedule_game_event: fn(_) ->
         Kernel.make_ref()
       end,
-      cancel_timer: fn(_) -> :ok end
+      schedule_end_game: fn(_) ->
+        Kernel.make_ref()
+      end,
+      schedule_game_timeout: fn(_) ->
+        Kernel.make_ref()
+      end,
+      cancel_scheduled_message: fn(_) -> 1000 end
     ]}
   ]) do
     {:ok, %{}}
@@ -65,7 +71,7 @@ defmodule GamePlatform.GameServerTest do
         game_state: nil,
         start_time: ~U[2024-01-06 23:25:38.371659Z],
         server_config: %{
-          game_timeout_length: :timer.minutes(30),
+          game_timeout_length: :timer.minutes(5),
           player_disconnect_timeout_length: :timer.minutes(2),
         },
         timeout_ref: nil,
@@ -84,7 +90,7 @@ defmodule GamePlatform.GameServerTest do
       game_state: nil,
       start_time: ~U[2024-01-06 23:25:38.371659Z],
       server_config: %{
-        game_timeout_length: :timer.minutes(30),
+        game_timeout_length: :timer.minutes(5),
         player_disconnect_timeout_length: :timer.minutes(2),
       },
       timeout_ref: nil,
@@ -97,6 +103,6 @@ defmodule GamePlatform.GameServerTest do
     assert new_state.timeout_ref |> is_reference()
     IO.inspect(new_state)
     assert_called MockGameState.init(%{game: :game_config})
-    assert_called Process.send_after(:_, :_, :_)
+    assert_called InternalComms.schedule_game_timeout(:timer.minutes(5))
   end
 end

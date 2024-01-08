@@ -20,6 +20,7 @@ defmodule WebGames.Minesweeper.GameState do
     display_name: "Minesweeper"
 
   alias GamePlatform.PubSubMessage
+  alias GamePlatform.GameServer.InternalComms
   alias WebGames.Minesweeper.Config
   alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
@@ -139,7 +140,7 @@ defmodule WebGames.Minesweeper.GameState do
 
   @impl true
   def handle_event(%__MODULE__{} = game, _, :restart) do
-    Process.cancel_timer(game.end_game_ref)
+    InternalComms.cancel_scheduled_message(game.end_game_ref)
 
     game = %__MODULE__{game |
       grid: create_blank_grid(game.w, game.h),
@@ -292,7 +293,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   defp end_game(game, status) do
-    end_game_ref = GamePlatform.GameServer.end_game(@post_game_timeout)
+    end_game_ref = GamePlatform.GameServer.InternalComms.schedule_end_game(@post_game_timeout)
 
     end_time = DateTime.utc_now()
 
