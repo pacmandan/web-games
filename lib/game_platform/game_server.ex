@@ -296,6 +296,8 @@ defmodule GamePlatform.GameServer do
 
   # Internal events, triggered via Process.send_after(self()) within the schedule_event().
   # Essentially this is handle_cast({:game_event, :game, event}, state), if :game were a legal value in that call.
+  # This is notibly also not wrapped in a %GameMessage%{}, an is instead just a tuple.
+  # This possibly needs changing in the future to remain consistent.
   @impl true
   def handle_info({:game_event, event}, state) do
     # TODO: I'm not sure if this one should be traced, since it encompasses
@@ -315,7 +317,7 @@ defmodule GamePlatform.GameServer do
         {:noreply, new_state}
 
       {:error, _reason} ->
-        # TODO: Log error
+        Logger.error("Game #{state.game_id} failed to handle an internal game event!", state_metadata(state, event: event))
         {:noreply, state}
     end
   end

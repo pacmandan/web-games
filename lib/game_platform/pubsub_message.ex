@@ -74,5 +74,6 @@ defmodule GamePlatform.PubSubMessage do
   def get_topic(:audience, game_id), do: "game:#{game_id}:audience"
   def get_topic({:player, player_id}, game_id), do: "game:#{game_id}:player:#{player_id}"
   def get_topic({:team, team_id}, game_id), do: "game:#{game_id}:team:#{team_id}"
+  def get_topic(to, game_id) when is_binary(to), do: "game:#{game_id}:#{to}"
   def get_topic(to, game_id), do: "game:#{game_id}:#{inspect(to)}"
 end

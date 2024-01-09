@@ -4,6 +4,7 @@ defmodule GamePlatform.GameServerTest do
 
   import Mock
 
+  alias GamePlatform.GameServer.GameMessage
   alias GamePlatform.GameServer
   alias GamePlatform.GameServer.InternalComms
   alias GamePlatform.MockGameState
@@ -37,7 +38,6 @@ defmodule GamePlatform.GameServerTest do
 
   setup_with_mocks([
     {MockGameState, [:passthrough], []},
-    # FIXME: Can't mock Process, refactor calls to another mockable module.
     {InternalComms, [], [
       schedule_game_event: fn(_) ->
         Kernel.make_ref()
@@ -48,61 +48,134 @@ defmodule GamePlatform.GameServerTest do
       schedule_game_timeout: fn(_) ->
         Kernel.make_ref()
       end,
+      schedule_player_disconnect_timeout: fn(_, _) ->
+        Kernel.make_ref()
+      end,
       cancel_scheduled_message: fn(_) -> 1000 end
     ]}
   ]) do
     {:ok, %{}}
   end
 
+  @default_state %{
+    game_id: "ABCD",
+    game_module: MockGameState,
+    game_config: %{conf: :success},
+    game_state: nil,
+    start_time: ~U[2024-01-06 23:25:38.371659Z],
+    server_config: %{
+      game_timeout_length: :timer.minutes(5),
+      player_disconnect_timeout_length: :timer.minutes(2),
+    },
+    timeout_ref: nil,
+    connected_player_ids: MapSet.new(),
+    connected_player_monitors: %{},
+    player_timeout_refs: %{},
+  }
+
   test "init initializes server state, then continues to game state" do
     init_args = {
       "ABCD",
-      {MockGameState, %{game: :game_config}},
+      {MockGameState, %{conf: :success}},
       %{},
     }
 
     with_mock DateTime, [utc_now: fn() -> ~U[2024-01-06 23:25:38.371659Z] end] do
       {:ok, init_state, next} = GameServer.init(init_args)
       assert next === {:continue, :init_game}
-      assert init_state == %{
-        game_id: "ABCD",
-        game_module: MockGameState,
-        game_config: %{game: :game_config},
-        game_state: nil,
-        start_time: ~U[2024-01-06 23:25:38.371659Z],
-        server_config: %{
-          game_timeout_length: :timer.minutes(5),
-          player_disconnect_timeout_length: :timer.minutes(2),
-        },
-        timeout_ref: nil,
-        connected_player_ids: MapSet.new(),
-        connected_player_monitors: %{},
-        player_timeout_refs: %{},
-      }
+      assert init_state == @default_state
     end
   end
 
   test "init_game continue calls to initialize game state and schedules timeout" do
-    current_state = %{
-      game_id: "ABCD",
-      game_module: MockGameState,
-      game_config: %{game: :game_config},
-      game_state: nil,
-      start_time: ~U[2024-01-06 23:25:38.371659Z],
-      server_config: %{
-        game_timeout_length: :timer.minutes(5),
-        player_disconnect_timeout_length: :timer.minutes(2),
-      },
-      timeout_ref: nil,
-      connected_player_ids: MapSet.new(),
-      connected_player_monitors: %{},
-      player_timeout_refs: %{},
-    }
-    {:noreply, new_state} = GameServer.handle_continue(:init_game, current_state)
+    {:noreply, new_state} = GameServer.handle_continue(:init_game, @default_state)
     assert new_state.game_state === %{state: :initialized}
     assert new_state.timeout_ref |> is_reference()
-    IO.inspect(new_state)
-    assert_called MockGameState.init(%{game: :game_config})
+    assert_called MockGameState.init(%{conf: :success})
     assert_called InternalComms.schedule_game_timeout(:timer.minutes(5))
+  end
+
+  test "init_game handles failures coming from the game state" do
+    state = @default_state
+    |> Map.put(:game_config, %{conf: :failed})
+
+    # This simply raises an error, crashing the server.
+    # Need to figure out a better way to handle this in the future maybe.
+    # If for no better reason than for communication to the frontend.
+    assert_raise MatchError, fn -> GameServer.handle_continue(:init_game, state) end
+    assert_called MockGameState.init(%{conf: :failed})
+  end
+
+  test "player_join success defaults" do
+    join_msg = %GameMessage{
+      action: :player_join,
+      from: "playerid_1",
+    }
+
+    state = @default_state
+    |> Map.put(:game_state, %{game_type: :test})
+
+    {:reply, {:ok, topics}, new_state}
+      = GameServer.handle_call(join_msg, self(), state)
+
+    assert_called MockGameState.join_game(%{game_type: :test}, "playerid_1")
+    assert_called InternalComms.schedule_game_timeout(:timer.minutes(5))
+    assert new_state.timeout_ref |> is_reference()
+    assert topics === ["game:ABCD", "game:ABCD:player:playerid_1"]
+    assert new_state.game_state[:last_called] === :join_game
+
+  end
+
+  test "player_join success custom additional topic" do
+    join_msg = %GameMessage{
+      action: :player_join,
+      from: "playerid_1",
+    }
+
+    game_state = %{game_type: :test, topics: ["custom"]}
+
+    state = @default_state
+    |> Map.put(:game_state, game_state)
+
+    {:reply, {:ok, topics}, new_state}
+      = GameServer.handle_call(join_msg, self(), state)
+
+    assert_called MockGameState.join_game(game_state, "playerid_1")
+    assert_called InternalComms.schedule_game_timeout(:timer.minutes(5))
+    assert new_state.timeout_ref |> is_reference()
+    assert topics === ["game:ABCD:custom", "game:ABCD", "game:ABCD:player:playerid_1"]
+    assert new_state.game_state[:last_called] === :join_game
+  end
+
+  test "player_join success dedups topics" do
+    join_msg = %GameMessage{
+      action: :player_join,
+      from: "playerid_1",
+    }
+
+    game_state = %{
+      game_type: :test,
+      topics: [:all, {:player, "playerid_1"}]
+    }
+
+    state = @default_state
+    |> Map.put(:game_state, game_state)
+
+    {:reply, {:ok, topics}, new_state}
+      = GameServer.handle_call(join_msg, self(), state)
+
+    assert_called MockGameState.join_game(game_state, "playerid_1")
+    assert_called InternalComms.schedule_game_timeout(:timer.minutes(5))
+    assert new_state.timeout_ref |> is_reference()
+    assert topics === ["game:ABCD", "game:ABCD:player:playerid_1"]
+    assert new_state.game_state[:last_called] === :join_game
+  end
+
+  test "player_join success broadcasts messages from state" do
+
+  end
+
+  test "player_join failed" do
+
   end
 end
