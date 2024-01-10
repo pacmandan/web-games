@@ -85,6 +85,8 @@ defmodule GamePlatform.GameServer do
     Map.has_key?(config, :pubsub) &&
     Map.get(config, :game_timeout_length, @default_server_config[:game_timeout_length]) > 0 &&
     Map.get(config, :player_disconnect_timeout_length, @default_server_config[:player_disconnect_timeout_length]) > 0
+    # TODO: Ensure timeouts cannot be too long.
+    # TODO: Use Ecto for validation here so we can get better error messages.
   end
 
   @impl true

@@ -69,6 +69,7 @@ defmodule GamePlatform.PubSubMessage do
     %__MODULE__{msg | from: from_id}
   end
 
+  @spec get_topic(any(), String.t()) :: String.t()
   def get_topic(:all, game_id), do: "game:#{game_id}"
   def get_topic(:players, game_id), do: "game:#{game_id}:players"
   def get_topic(:audience, game_id), do: "game:#{game_id}:audience"
