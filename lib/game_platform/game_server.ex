@@ -216,8 +216,9 @@ defmodule GamePlatform.GameServer do
           # Ignore - we got a message from an unconnected player.
           Logger.warning("Game #{state.game_id} got a :game_event from an unconnected player, #{msg.from}.", state_metadata(state, player_id: msg.from, msg: msg, event: msg.payload))
           {:noreply, state}
-        _error ->
-          # TODO: Log error
+        {:error, err} ->
+          Logger.error("Game #{state.game_id} experienced an error on :game_event!", state_metadata(state, player_id: msg.from, msg: msg, event: msg.payload, error: err))
+          # TODO: Message all players that there was an error.
           {:noreply, state}
       end
     end
@@ -383,6 +384,8 @@ defmodule GamePlatform.GameServer do
         connected_player_ids = MapSet.delete(state.connected_player_ids, player_id)
         Process.demonitor(monitor_ref)
 
+        Logger.info("Game #{state.game_id} removing a player #{player_id} that was connected.")
+
         state
         |> Map.replace(:connected_player_monitors, connected_player_monitors)
         |> Map.replace(:connected_player_ids, connected_player_ids)
@@ -390,7 +393,7 @@ defmodule GamePlatform.GameServer do
         |> end_game_if_no_one_is_here()
       nil ->
         # We are removing a player that has already disconnected.
-        Logger.warning("Game #{state.game_id} attempted to remove player #{player_id} that wasn't connected.", state_metadata(state, player_id: player_id, reason: reason))
+        Logger.info("Game #{state.game_id} removing a player #{player_id} that has already disconnected or never existed.", state_metadata(state, player_id: player_id, reason: reason))
         state
     end
 
@@ -404,8 +407,9 @@ defmodule GamePlatform.GameServer do
         # The game state has failed somehow. But we've already removed this player.
         # Do we want to invert this, only removing the player if the game
         # state removal is successful?
+        # Might need to make some more sophisticated games to test cases on this.
         Logger.error("Game #{new_state.game_id} failed to remove player #{player_id} from game state for reason: #{inspect(err)}.", state_metadata(state, player_id: player_id, err: err))
-        {:error, new_state}
+        {{:error, err}, new_state}
     end
   end
 
