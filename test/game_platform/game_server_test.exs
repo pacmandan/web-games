@@ -12,10 +12,6 @@ defmodule GamePlatform.GameServerTest do
 
   @doc """
   TODO Test cases:
-  - :player_leave calls module
-  - :player_leave handles errors from module
-  - :game_event calls module
-  - :game_event handles errors
   - :player_connected calls module, updates connections
   - :player_connected handles errors
   - :DOWN (:player_disconnected) calls module, updates connections
@@ -27,6 +23,37 @@ defmodule GamePlatform.GameServerTest do
   - {:server_event, {:player_disconnect_timeout}} removes player, calls module
   - {:server_event, {:player_disconnect_timeout}} handles errors
   """
+
+  @default_state %{
+    game_id: "ABCD",
+    game_module: MockGameState,
+    game_config: %{conf: :success},
+    game_state: %{game_type: :test},
+    start_time: ~U[2024-01-06 23:25:38.371659Z],
+    server_config: %{
+      game_timeout_length: :timer.minutes(5),
+      player_disconnect_timeout_length: :timer.minutes(2),
+      pubsub: WebGames.PubSub,
+    },
+    timeout_ref: nil,
+    connected_player_ids: MapSet.new(),
+    connected_player_monitors: %{},
+    player_timeout_refs: %{},
+  }
+
+  defp connect_players(state, ids) do
+    {id_refs, connected_ids, connected_monitors} = ids
+    |> Stream.map(fn id -> {id, Kernel.make_ref()} end)
+    |> Enum.reduce({%{}, MapSet.new(), %{}}, fn ({id, ref}, {id_refs, connected_ids, connected_monitors}) ->
+      {Map.put(id_refs, id, ref), MapSet.put(connected_ids, id), Map.put(connected_monitors, ref, id)}
+    end)
+
+    connected_state = state
+    |> Map.put(:connected_player_ids, connected_ids)
+    |> Map.put(:connected_player_monitors, connected_monitors)
+
+    {id_refs, connected_state}
+  end
 
   setup_with_mocks([
     {MockGameState, [:passthrough], []},
@@ -48,23 +75,6 @@ defmodule GamePlatform.GameServerTest do
   ]) do
     {:ok, %{}}
   end
-
-  @default_state %{
-    game_id: "ABCD",
-    game_module: MockGameState,
-    game_config: %{conf: :success},
-    game_state: nil,
-    start_time: ~U[2024-01-06 23:25:38.371659Z],
-    server_config: %{
-      game_timeout_length: :timer.minutes(5),
-      player_disconnect_timeout_length: :timer.minutes(2),
-      pubsub: WebGames.PubSub,
-    },
-    timeout_ref: nil,
-    connected_player_ids: MapSet.new(),
-    connected_player_monitors: %{},
-    player_timeout_refs: %{},
-  }
 
   test "start_link fails if :pubsub is not set" do
     init_args = {
@@ -151,11 +161,8 @@ defmodule GamePlatform.GameServerTest do
       from: "playerid_1",
     }
 
-    state = @default_state
-    |> Map.put(:game_state, %{game_type: :test})
-
     {:reply, {:ok, topics}, new_state}
-      = GameServer.handle_call(join_msg, self(), state)
+      = GameServer.handle_call(join_msg, self(), @default_state)
 
     assert_called MockGameState.join_game(%{game_type: :test}, "playerid_1")
     assert_called InternalComms.schedule_game_timeout(:timer.minutes(5))
@@ -263,7 +270,7 @@ defmodule GamePlatform.GameServerTest do
     assert_called MockGameState.join_game(game_state, "playerid_1")
 
     # Since it failed, the timeout should NOT be rescheduled.
-    assert_not_called InternalComms.schedule_game_timeout(:timer.minutes(5))
+    assert_not_called InternalComms.schedule_game_timeout(:_)
     assert new_state.timeout_ref |> is_nil()
   end
 
@@ -274,5 +281,224 @@ defmodule GamePlatform.GameServerTest do
         display_name: "MOCK_GAME",
       }}, _new_state}
         = GameServer.handle_call(:game_info, self(), @default_state)
+  end
+
+  test "player_leave calls module but otherwise does nothing on disconnected player" do
+    leave_msg = %GameMessage{
+      action: :player_leave,
+      from: "playerid_1",
+    }
+
+    {id_refs, state} = @default_state
+    |> connect_players(["playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    {:reply, :ok, new_state} = GameServer.handle_call(leave_msg, self(), state)
+
+    assert_called MockGameState.leave_game(%{game_type: :test}, "playerid_1", :manual)
+    assert_not_called InternalComms.schedule_game_timeout(:_)
+    assert new_state.timeout_ref |> is_nil()
+    assert new_state.game_state[:last_called] === :leave_game
+    assert new_state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert new_state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+  end
+
+  test "player_leave removes connected player" do
+    leave_msg = %GameMessage{
+      action: :player_leave,
+      from: "playerid_1",
+    }
+
+    {id_refs, state} = @default_state
+    |> connect_players(["playerid_1", "playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+      Map.fetch!(id_refs, "playerid_1") => "playerid_1",
+    }
+
+    {:reply, :ok, new_state} = GameServer.handle_call(leave_msg, self(), state)
+
+    assert_called MockGameState.leave_game(%{game_type: :test}, "playerid_1", :manual)
+    assert_not_called InternalComms.schedule_game_timeout(:_)
+    assert new_state.timeout_ref |> is_nil()
+    assert new_state.game_state[:last_called] === :leave_game
+    assert new_state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert new_state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+  end
+
+  test "player_leave returns an error if module fails" do
+    leave_msg = %GameMessage{
+      action: :player_leave,
+      from: "playerid_1",
+    }
+
+    game_state = %{game_type: :test, error: true}
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    {:reply, {:error, :failed}, new_state} = GameServer.handle_call(leave_msg, self(), state)
+
+    assert_called MockGameState.leave_game(game_state, "playerid_1", :manual)
+    assert_not_called InternalComms.schedule_game_timeout(:_)
+    # State should remain unchanged on failure here
+    assert new_state === state
+  end
+
+  test "player_leave still removes connected player even on module failure" do
+    leave_msg = %GameMessage{
+      action: :player_leave,
+      from: "playerid_1",
+    }
+
+    game_state = %{game_type: :test, error: true}
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_1", "playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+      Map.fetch!(id_refs, "playerid_1") => "playerid_1",
+    }
+
+    {:reply, {:error, :failed}, new_state} = GameServer.handle_call(leave_msg, self(), state)
+
+    assert_called MockGameState.leave_game(%{game_type: :test}, "playerid_1", :manual)
+    assert_not_called InternalComms.schedule_game_timeout(:_)
+    assert new_state.timeout_ref |> is_nil()
+    # Player1 should still be removed, even on failure
+    assert new_state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert new_state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+  end
+
+  test "game_event should forward the event to the state module" do
+    event_msg = %GameMessage{
+      action: :game_event,
+      from: "playerid_1",
+      payload: %{do_stuff: true},
+    }
+
+    game_state = %{
+      game_type: :test,
+      msgs: [PubSubMessage.build(:all, "Test msg")]
+    }
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_1", "playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+      Map.fetch!(id_refs, "playerid_1") => "playerid_1",
+    }
+
+    # Subscribe so we can see if the message was sent.
+    Phoenix.PubSub.subscribe(WebGames.PubSub, "game:ABCD")
+
+    {:noreply, new_state} = GameServer.handle_cast(event_msg, state)
+
+    assert_called MockGameState.handle_event(%{game_type: :test}, "playerid_1", %{do_stuff: true})
+    assert_called InternalComms.schedule_game_timeout(:timer.minutes(5))
+    assert new_state.timeout_ref |> is_reference()
+    assert new_state.connected_player_ids === state.connected_player_ids
+    assert new_state.connected_player_monitors === state.connected_player_monitors
+    assert new_state.game_state[:last_called] === :handle_event
+    assert_receive %PubSubMessage{payload: "Test msg", to: :all, type: :game_event}
+  end
+
+  test "game_event should ignore messages from unconnected players" do
+    event_msg = %GameMessage{
+      action: :game_event,
+      from: "playerid_1",
+      payload: %{do_stuff: true},
+    }
+
+    game_state = %{
+      game_type: :test,
+      msgs: [PubSubMessage.build(:all, "Test msg")]
+    }
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    # Subscribe so we can see if the message was sent.
+    Phoenix.PubSub.subscribe(WebGames.PubSub, "game:ABCD")
+
+    {:noreply, new_state} = GameServer.handle_cast(event_msg, state)
+
+    assert_not_called MockGameState.handle_event(:_, :_, :_)
+    assert_not_called InternalComms.schedule_game_timeout(:_)
+    assert new_state.timeout_ref |> is_nil()
+    assert new_state.connected_player_ids === state.connected_player_ids
+    assert new_state.connected_player_monitors === state.connected_player_monitors
+    assert new_state.game_state === state.game_state
+    refute_receive %PubSubMessage{payload: "Test msg", to: :all, type: :game_event}
+  end
+
+  test "game_event should properly handle errors from state module" do
+    event_msg = %GameMessage{
+      action: :game_event,
+      from: "playerid_1",
+      payload: %{do_stuff: true},
+    }
+
+    game_state = %{
+      game_type: :test,
+      error: true,
+    }
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_1", "playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+      Map.fetch!(id_refs, "playerid_1") => "playerid_1",
+    }
+
+    {:noreply, new_state} = GameServer.handle_cast(event_msg, state)
+
+    assert_called MockGameState.handle_event(%{game_type: :test, error: true}, "playerid_1", %{do_stuff: true})
+    assert_not_called InternalComms.schedule_game_timeout(:_)
+    assert new_state.timeout_ref |> is_nil()
+    assert new_state.connected_player_ids === state.connected_player_ids
+    assert new_state.connected_player_monitors === state.connected_player_monitors
+    assert new_state.game_state === state.game_state
+    refute_receive %PubSubMessage{payload: "Test msg", to: :all, type: :game_event}
   end
 end
