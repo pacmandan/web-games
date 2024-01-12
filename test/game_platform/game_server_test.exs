@@ -1,6 +1,5 @@
 defmodule GamePlatform.GameServerTest do
   use ExUnit.Case
-  doctest GamePlatform.Cache
 
   import Mock
 
