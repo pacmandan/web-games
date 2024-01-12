@@ -364,19 +364,24 @@ defmodule GamePlatform.GameServer do
 
   defp halt_game(state) do
     Logger.info("Game #{state.game_id} halting game...", state_metadata(state))
-    {:ok, msgs, new_game_state} = state.game_module.handle_game_shutdown(state.game_state)
+    case state.game_module.handle_game_shutdown(state.game_state) do
+      {:ok, msgs, new_game_state} ->
+        new_state = state
+        |> Map.replace(:game_state, new_game_state)
 
-    new_state = state
-    |> Map.replace(:game_state, new_game_state)
+        # TODO: Add a server-level notification?
+        broadcast_pubsub(msgs, state)
 
-    # TODO: Add a server-level notification (somehow)?
-    # We'd need to know what topics to send to.
-    # So we'd either need a "universal" channel outside of what the
-    # game uses, or keep track of the channels the game uses.
-    broadcast_pubsub(msgs, state)
-
-    Logger.info("Game #{state.game_id} halted successfully!", state_metadata(state))
-    {:stop, :normal, new_state}
+        Logger.info("Game #{state.game_id} halted successfully!", state_metadata(state))
+        {:stop, :normal, new_state}
+      {:error, err} ->
+        Logger.error("Game #{state.game_id} errored while handling shutdown - shutting down anyway.", state_metadata(state, error: err))
+        {:stop, :normal, state}
+      err ->
+        # No matter what, we NEED to return :stop if told to halt.
+        Logger.error("Game #{state.game_id} encountered unknown error while handling shutdown - shutting down anyway.", state_metadata(state, error: err))
+        {:stop, :normal, state}
+    end
   end
 
   # Remove the given player from the game.
@@ -398,6 +403,8 @@ defmodule GamePlatform.GameServer do
         |> Map.replace(:connected_player_ids, connected_player_ids)
         |> cancel_player_timeout(player_id)
         |> end_game_if_no_one_is_here()
+
+        # TODO: Since this is a connected player, we should call player_disconnect first.
       nil ->
         # We are removing a player that has already disconnected.
         Logger.info("Game #{state.game_id} removing a player #{player_id} that has already disconnected or never existed.", state_metadata(state, player_id: player_id, reason: reason))
