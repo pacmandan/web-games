@@ -7,8 +7,6 @@ defmodule GamePlatform.PubSubMessage do
     type: :game_event,
   ]
 
-  require Logger
-
   @type topic_ref ::
     :all
     | :audience
