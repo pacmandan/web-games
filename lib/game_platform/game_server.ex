@@ -235,9 +235,15 @@ defmodule GamePlatform.GameServer do
       case state.game_module.player_connected(state.game_state, msg.from) do
         {:ok, msgs, new_game_state} ->
           # Monitor connected player to see if/when they disconnect
-          new_state = state
-          |> Map.replace(:connected_player_monitors, Map.put(state.connected_player_monitors, Process.monitor(msg.payload[:pid]), msg.from))
-          |> Map.replace(:connected_player_ids, MapSet.put(state.connected_player_ids, msg.from))
+
+          new_state = if MapSet.member?(state.connected_player_ids, msg.from) do
+            # This player is already connected - don't monitor them twice.
+            state
+          else
+            state
+            |> Map.replace(:connected_player_monitors, Map.put(state.connected_player_monitors, Process.monitor(msg.payload[:pid]), msg.from))
+            |> Map.replace(:connected_player_ids, MapSet.put(state.connected_player_ids, msg.from))
+          end
           |> Map.replace(:game_state, new_game_state)
 
           broadcast_pubsub(msgs, new_state)
@@ -268,13 +274,14 @@ defmodule GamePlatform.GameServer do
       state = state
       |> Map.replace(:connected_player_monitors, connected_player_monitors)
       |> Map.replace(:connected_player_ids, connected_player_ids)
-      |> schedule_player_timeout(player_id)
 
       if player_id |> is_nil() do
         # Nevermind, this is probably not actually a connected player.
         Logger.warning("Game #{state.game_id} disconnect message recieved from player that doesn't exist or has already disconnected.", state_metadata(state, ref: ref))
         {:noreply, state}
       else
+        # Schedule a timeout
+        state = schedule_player_timeout(state, player_id)
         # Tell the game state that a player has disconnected
         case state.game_module.player_disconnected(state.game_state, player_id) do
           {:ok, msgs, new_game_state} ->
@@ -395,6 +402,7 @@ defmodule GamePlatform.GameServer do
         # We are removing a player that has already disconnected.
         Logger.info("Game #{state.game_id} removing a player #{player_id} that has already disconnected or never existed.", state_metadata(state, player_id: player_id, reason: reason))
         state
+        |> end_game_if_no_one_is_here()
     end
 
     # Tell the game state that this player is leaving.

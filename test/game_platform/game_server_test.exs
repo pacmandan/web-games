@@ -12,8 +12,6 @@ defmodule GamePlatform.GameServerTest do
 
   @doc """
   TODO Test cases:
-  - :player_connected calls module, updates connections
-  - :player_connected handles errors
   - :DOWN (:player_disconnected) calls module, updates connections
   - :DOWN (:player_disconnected) handles errors
   - :game_event handle_info calls module with :game
@@ -500,5 +498,245 @@ defmodule GamePlatform.GameServerTest do
     assert new_state.connected_player_monitors === state.connected_player_monitors
     assert new_state.game_state === state.game_state
     refute_receive %PubSubMessage{payload: "Test msg", to: :all, type: :game_event}
+  end
+
+  test "player_connected adds player to connected list and calls module" do
+    connection_msg = %GameMessage{
+      action: :player_connected,
+      from: "playerid_1",
+      payload: %{
+        pid: self()
+      },
+    }
+
+    game_state = %{
+      game_type: :test,
+      msgs: [PubSubMessage.build({:player, "playerid_1"}, {:sync, %{game_type: :test}}, :sync)]
+    }
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    # Subscribe so we can see if the message was sent.
+    Phoenix.PubSub.subscribe(WebGames.PubSub, "game:ABCD:player:playerid_1")
+
+    {:noreply, new_state} = GameServer.handle_cast(connection_msg, state)
+
+    assert_called MockGameState.player_connected(game_state, "playerid_1")
+    assert new_state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+
+    # assert state.connected_player_monitors === %{
+    #   Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    #   _ref => "playerid_1",
+    # }
+    cpms = Map.new(new_state.connected_player_monitors, fn {ref, id} -> {id, ref} end)
+    assert Enum.count(cpms) === 2
+    assert cpms["playerid_1"] |> is_reference()
+    assert cpms["playerid_2"] === Map.fetch!(id_refs, "playerid_2")
+
+    assert_receive %PubSubMessage{payload: {:sync, %{game_type: :test}}, to: {:player, "playerid_1"}, type: :sync}
+  end
+
+  test "player_connected cancels any active timeout for player" do
+    connection_msg = %GameMessage{
+      action: :player_connected,
+      from: "playerid_1",
+      payload: %{
+        pid: self()
+      },
+    }
+
+    p1timeout_ref = Kernel.make_ref()
+    p2timeout_ref = Kernel.make_ref()
+
+    {id_refs, state} = @default_state
+    |> Map.put(:player_timeout_refs, %{
+      "playerid_1" => p1timeout_ref,
+      "playerid_2" => p2timeout_ref,
+    })
+    |> connect_players(["playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    {:noreply, new_state} = GameServer.handle_cast(connection_msg, state)
+
+    assert_called MockGameState.player_connected(%{game_type: :test}, "playerid_1")
+    assert new_state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+
+    # assert state.connected_player_monitors === %{
+    #   Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    #   _ref => "playerid_1",
+    # }
+    cpms = Map.new(new_state.connected_player_monitors, fn {ref, id} -> {id, ref} end)
+    assert Enum.count(cpms) === 2
+    assert cpms["playerid_1"] |> is_reference()
+    assert cpms["playerid_2"] === Map.fetch!(id_refs, "playerid_2")
+
+    assert new_state.player_timeout_refs === %{
+      "playerid_2" => p2timeout_ref
+    }
+    assert_called InternalComms.cancel_scheduled_message(p1timeout_ref)
+  end
+
+  test "player_connected does not connect player on error" do
+    connection_msg = %GameMessage{
+      action: :player_connected,
+      from: "playerid_1",
+      payload: %{
+        pid: self()
+      },
+    }
+
+    game_state = %{
+      game_type: :test,
+      error: true,
+    }
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    {:noreply, new_state} = GameServer.handle_cast(connection_msg, state)
+
+    assert_called MockGameState.player_connected(game_state, "playerid_1")
+    assert new_state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert new_state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+  end
+
+  test "player_connected handles connection from already connected player" do
+    # It should still call the module, because maybe it missed the sync message.
+    # But it shouldn't set up a second monitor.
+    connection_msg = %GameMessage{
+      action: :player_connected,
+      from: "playerid_1",
+      payload: %{
+        pid: self()
+      },
+    }
+
+    {id_refs, state} = @default_state
+    |> connect_players(["playerid_1", "playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+      Map.fetch!(id_refs, "playerid_1") => "playerid_1",
+    }
+
+    {:noreply, new_state} = GameServer.handle_cast(connection_msg, state)
+
+    assert_called MockGameState.player_connected(%{game_type: :test}, "playerid_1")
+    assert new_state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+    assert new_state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+      Map.fetch!(id_refs, "playerid_1") => "playerid_1",
+    }
+  end
+
+  test "player_disconnect (DOWN) calls the state module, disconnects, and sets timer" do
+    game_state = %{
+      game_type: :test,
+      msgs: [PubSubMessage.build(:all, "Player has disconnected")]
+    }
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_1", "playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_1") => "playerid_1",
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    Phoenix.PubSub.subscribe(WebGames.PubSub, "game:ABCD")
+
+    down_msg = {:DOWN, Map.fetch!(id_refs, "playerid_1"), :process, %{}, :crash}
+
+    {:noreply, new_state} = GameServer.handle_info(down_msg, state)
+
+    assert_called MockGameState.player_disconnected(game_state, "playerid_1")
+    assert_called InternalComms.schedule_player_disconnect_timeout("playerid_1", :timer.minutes(2))
+    assert new_state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert new_state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+    assert_receive %PubSubMessage{payload: "Player has disconnected", to: :all, type: :game_event}
+  end
+
+  test "player_disconnect (DOWN) ignores not connected players" do
+    {id_refs, state} = @default_state
+    |> connect_players(["playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    monitor_ref = Kernel.make_ref()
+
+    down_msg = {:DOWN, monitor_ref, :process, %{}, :crash}
+
+    {:noreply, new_state} = GameServer.handle_info(down_msg, state)
+
+    assert_not_called MockGameState.player_disconnected(:_, :_)
+    assert_not_called InternalComms.schedule_player_disconnect_timeout(:_, :_)
+    assert new_state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert new_state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+  end
+
+  test "player disconnect (DOWN) still disconnects on error" do
+    game_state = %{
+      game_type: :test,
+      error: true,
+    }
+
+    {id_refs, state} = @default_state
+    |> Map.put(:game_state, game_state)
+    |> connect_players(["playerid_1", "playerid_2"])
+
+    # Double-check our mock connection
+    assert state.connected_player_ids === MapSet.new(["playerid_1", "playerid_2"])
+    assert state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_1") => "playerid_1",
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
+
+    Phoenix.PubSub.subscribe(WebGames.PubSub, "game:ABCD")
+
+    down_msg = {:DOWN, Map.fetch!(id_refs, "playerid_1"), :process, %{}, :crash}
+
+    {:noreply, new_state} = GameServer.handle_info(down_msg, state)
+
+    assert_called MockGameState.player_disconnected(game_state, "playerid_1")
+    assert_called InternalComms.schedule_player_disconnect_timeout("playerid_1", :timer.minutes(2))
+    assert new_state.connected_player_ids === MapSet.new(["playerid_2"])
+    assert new_state.connected_player_monitors === %{
+      Map.fetch!(id_refs, "playerid_2") => "playerid_2",
+    }
   end
 end
