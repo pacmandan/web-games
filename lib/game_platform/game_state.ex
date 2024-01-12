@@ -26,9 +26,6 @@ defmodule GamePlatform.GameState do
   If the player joins successfully, return instructions for how that player should connect.
 
   `topics` is a list of PubSub topics the caller should subscribe to in order to join as this player.
-  `opts` is a list of player options associated with the given player ID. On first join, these will be
-  defaults that the state provides. On subsequent joins, they should be things specific to the player's view,
-  such as name, text scaling, display colors, etc. (Nothing related to actual _game_ state.)
 
   If trying to add a player that already exists, return successfully as if they were just added.
   """
@@ -97,9 +94,9 @@ defmodule GamePlatform.GameState do
 
       def join_game(state, _), do: {:ok, [], state}
       def leave_game(state, _, _), do: {:ok, [], state}
-      def player_connected(_, state), do: {:ok, [], state}
+      def player_connected(state, _), do: {:ok, [], state}
       def player_disconnected(state, _), do: {:ok, [], state}
-      def handle_event(_, _, state), do: {:ok, [], state}
+      def handle_event(state, _, _), do: {:ok, [], state}
       def handle_game_shutdown(state), do: {:ok, [], state}
       def game_info() do
         info = %GamePlatform.GameState.GameInfo{
