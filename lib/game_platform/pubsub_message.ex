@@ -7,6 +7,8 @@ defmodule GamePlatform.PubSubMessage do
     type: :game_event,
   ]
 
+  require Logger
+
   @type topic_ref ::
     :all
     | :audience
@@ -33,7 +35,6 @@ defmodule GamePlatform.PubSubMessage do
 
   def combine_msgs(msgs) do
     msgs
-    |> Enum.reverse()
     |> Enum.reduce(%{}, fn msg, acc ->
       if acc[{msg.to, msg.type}] do
         acc_msg = acc[{msg.to, msg.type}]
