@@ -6,11 +6,7 @@ View is a process connected to each player that holds rendering logic and
 player-specific state.
 
 ```mermaid
----
-config:
-  flowchart:
-    defaultRenderer: elk
----
+%%{init: {"flowchart": {"defaultRenderer":"elk"}}}%%
 flowchart LR
   subgraph p1proc[Player 1 Process]
     p1view["PlayerView (LiveView)"] --> p1comp(["MyPlayerComponent"])
