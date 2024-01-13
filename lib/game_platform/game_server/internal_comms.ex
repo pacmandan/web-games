@@ -72,6 +72,10 @@ defmodule GamePlatform.GameServer.InternalComms do
     schedule_server_event(:game_timeout, after_millis)
   end
 
+  @doc """
+  Cancels a timer reference via `Process.cancel_timer`.
+  """
+  @spec cancel_scheduled_message(reference()) :: non_neg_integer() | false
   def cancel_scheduled_message(ref) do
     Process.cancel_timer(ref)
   end
