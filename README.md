@@ -15,7 +15,7 @@ I bit off more than I could chew. Either way, I'm using this as an excuse to
 play around with PubSub, LiveView, and process registration techniques. (Things
 most database-driven applications don't usually need to care about.)
 
-Documentation for the underling architecture can be found [here](./guides/Architecture.md).
+Documentation for the underlying architecture can be found [here](./guides/Architecture.md).
 
 ## Starting the server
 

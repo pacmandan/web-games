@@ -23,7 +23,7 @@ re-establish the connection, the timer is automatically cancelled.
 Once the last player has disconnected from the game, the GameServer will
 schedule a 60 second game timeout before shutting down.
 
-## Game timeouts
+### Game timeouts
 In order to not have games running perpetually, each Server is given a "game
 timeout". If this timeout ever expires, the game is considered to be abandoned
 and will automatically shut down.
@@ -31,9 +31,13 @@ and will automatically shut down.
 This timeout is refreshed every time a new player joins, or every time a game
 event is sent by a player. (Game events triggered internally do not count.)
 
-## PubSub Message Broadcasting
+### PubSub Message Broadcasting
 Nearly every function in the `GameState` behaviour can return a `[msgs]` array,
 containing `PubSubMessage`s that will be sent out to players.
+
+### Filter events
+Any `:game_events` coming from players that are not connected are ignored
+and discarded before they can be sent to the GameState module.
 
 ## The GameState @behaviour
 
@@ -164,7 +168,7 @@ No matter what this returns, the Server will halt after this point.
 
 ## An Example Game - Minesweeper
 
-Minesweeper is a single-player game that involves clicking on tiles, and
+Minesweeper is a single-player game that involves clicking on tiles and
 trying not to blow up.
 
 For our `join_game()` and `leave_game()` functions, we only need to keep
