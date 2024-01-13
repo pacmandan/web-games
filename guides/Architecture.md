@@ -35,6 +35,9 @@ flowchart LR
 
 ## Server vs View: Game State
 
+Both the Server and View contain "state" information about the game, but they
+are not exact copies of each other.
+
 Consider a card game with 4 players where the goal is to play
 all cards in your hand first.
 
