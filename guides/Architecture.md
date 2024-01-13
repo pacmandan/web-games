@@ -107,16 +107,6 @@ flowchart
 
 ## Modules
 
-```mermaid
-%%{init: {"quadrantChart": {"chartWidth": 750}}}%%
-quadrantChart
-  x-axis Platform Modules --> "Behaviour Modules (Implemented)"
-  y-axis View Modules --> Server Modules
-  quadrant-1 "`@behaviour GamePlatform.GameState`"
-  quadrant-2 GamePlatform.GameServer
-  quadrant-3 GamePlatform.PlayerView
-  quadrant-4 "`@behaviour GamePlatform.PlayerComponent`"
-```
 There are 4 key modules that make up a game in this framework:
 * **GameServer**: The underlying GenServer running in the Server process.
 * **GameState**: A behaviour intended to be implemented with game-specific logic.
@@ -143,3 +133,7 @@ game logic.
 Behaviour modules are modules passed to the Platform modules, and represent
 specific games. These contain functions that link them to the Server or View,
 hooking your game logic into them.
+
+## Further reading
+* [Server Documentation](Server.md)
+* [View Documentation](View.md)
