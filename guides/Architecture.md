@@ -121,6 +121,11 @@ There are 4 key modules that make up a game in this framework:
 There are two axes we can view these modules from: Server vs View, and
 Platform vs Behaviour (or Implemented).
 
+* **GameServer**: Platform Server
+* **GameState**: Implemented Server
+* **PlayerView**: Platform View
+* **PlayerComponent**: Implemented View
+
 We've already talked about Server vs View, but they essentially represent the
 "backend" and "frontend" of the game. The Server is running in it's own process,
 while there is a View process for each player handling rendering.

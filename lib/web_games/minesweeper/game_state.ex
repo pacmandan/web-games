@@ -45,14 +45,13 @@ defmodule WebGames.Minesweeper.GameState do
   def init(config) do
     if Config.valid?(config) do
       game = %__MODULE__{
-        # start_time: DateTime.utc_now(),
         w: config.width,
         h: config.height,
         num_mines: config.num_mines,
         game_type: config.type,
         grid: create_blank_grid(config.width, config.height),
       }
-      # Display.display_grid(game)
+
       {:ok, game}
     else
       # TODO: Return WHICH error caused the config to not be valid
@@ -89,7 +88,6 @@ defmodule WebGames.Minesweeper.GameState do
     # Loop through each space we need to mine..
     |> Enum.reduce(game.grid, fn mined_coord, grid ->
       # Put a mine in the space we picked.
-      # mined_grid = Map.replace(mined_grid, mined_space, %{mined_grid[mined_space] | has_mine?: true})
       grid = Map.replace(grid, mined_coord, Cell.place_mine(grid[mined_coord]))
 
       get_adjacent_coords(mined_coord)
@@ -187,8 +185,6 @@ defmodule WebGames.Minesweeper.GameState do
     |> update_status()
     |> take_notifications()
 
-    # Display.display_grid(g, true)
-
     {:ok, n, g}
   end
 
@@ -196,8 +192,6 @@ defmodule WebGames.Minesweeper.GameState do
   def handle_event(%__MODULE__{} = game, _, {:flag, space}) do
     {n, g} = toggle_flag(space, game)
     |> take_notifications()
-
-    # Display.display_grid(g, true)
 
     {:ok, n, g}
   end
