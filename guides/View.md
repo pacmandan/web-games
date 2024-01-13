@@ -63,8 +63,8 @@ To create a new PlayerComponent, add the following to your module:
   use GamePlatform.PlayerComponent
 ```
 
-Beyond that, there are three functions to implement, each representing
-the handling of incoming messages:
+Beyond that and the LiveComponent functions, there are three unique functions
+to implement, each representing the handling of incoming messages:
 
 ### `handle_sync(socket, payload) :: {:ok, updated_socket}`
 This is called to handle `:sync` events from the server. After this message
@@ -90,6 +90,9 @@ after a certain number of seconds, you can use a display event.
 
 ## Example Game - Minesweeper
 
+Minesweeper is a single-player game that involves clickin on tiles and trying
+not to blow up.
+
 The View in this game should display four things:
 * A count-up timer that starts after the first click
 * The game grid
@@ -106,8 +109,8 @@ push it directly into the socket - no additional processing needed, just
 a map merge.
 
 Game events can come in many forms. In this case, since multiple things can
-happen in a single click, each message contains a list of payloads. Some
-examples are:
+happen in a single click, each message contains a list of payloads, allowing those
+payloads to be applied simultaneously between renders. Some examples are:
 * `{:flag, cell}`: The flag on this cell has updated.
 * `{:click, cell}`: The clicked? value on this cell has updated.
 * `{:open, cells}`: A list of cells that should be marked as "open", along with
