@@ -37,6 +37,12 @@ within the PlayerView.
 After the PlayerComponent is mounted, the first function that gets called is
 `handle_sync`, as all `:game_event`s are ignored until a `:sync` is received.
 
+### Monitor Game Server
+Once connected, the PlayerView will monitor the status of the GameServer process.
+If it crashes, it will attempt to reconnect after a few seconds. If the process
+doesn't exist when it tries to reconnect, it will redirect the browser back
+to the home page.
+
 ### "Leave Game" button
 Outside the boundary of the PlayerComponent, several status messages are
 displayed, as well as a "Leave Game" button. This immediately sends a "player_leave"
