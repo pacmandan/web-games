@@ -24,7 +24,6 @@ defmodule WebGames.Minesweeper.GameState do
   alias WebGames.Minesweeper.Config
   alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
-  # alias GamePlatform.Notification
 
   @type notification_t :: {String.t() | atom(), any()}
   @type coord_t :: {integer(), integer()}
@@ -54,7 +53,6 @@ defmodule WebGames.Minesweeper.GameState do
 
       {:ok, game}
     else
-      # TODO: Return WHICH error caused the config to not be valid
       {:error, :invalid_config}
     end
   end
@@ -121,7 +119,33 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
-  # @decorate trace()
+  def join_game(%__MODULE__{player: nil} = game, player_id) do
+    {n, g} = %__MODULE__{game | player: player_id}
+    |> add_notification(:all, {:added, player_id})
+    |> take_notifications()
+
+    topic_refs = [
+      :all,
+      {:player, player_id}
+    ]
+
+    {:ok, topic_refs, n, g}
+  end
+
+  @impl true
+  def join_game(%__MODULE__{player: existing_player_id} = game, player_id) when player_id == existing_player_id do
+    topic_refs = [
+      :all,
+      {:player, player_id}
+    ]
+
+    {:ok, topic_refs, [], game}
+  end
+
+  @impl true
+  def join_game(_, _), do: {:error, :game_full}
+
+  @impl true
   def player_connected(game, player_id) do
     if player_id == game.player do
       sync_data = build_sync_data(game)
@@ -325,33 +349,6 @@ defmodule WebGames.Minesweeper.GameState do
       {_, %{flagged?: false}}, acc -> acc
     end)
   end
-
-  @impl true
-  def join_game(%__MODULE__{player: nil} = game, player_id) do
-    {n, g} = %__MODULE__{game | player: player_id}
-    |> add_notification(:all, {:added, player_id})
-    |> take_notifications()
-
-    topic_refs = [
-      :all,
-      {:player, player_id}
-    ]
-
-    {:ok, topic_refs, n, g}
-  end
-
-  @impl true
-  def join_game(%__MODULE__{player: existing_player_id} = game, player_id) when player_id == existing_player_id do
-    topic_refs = [
-      :all,
-      {:player, player_id}
-    ]
-
-    {:ok, topic_refs, [], game}
-  end
-
-  @impl true
-  def join_game(_, _), do: {:error, :game_full}
 
   @impl true
   def handle_game_shutdown(game) do
