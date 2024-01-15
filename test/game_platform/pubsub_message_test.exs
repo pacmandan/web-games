@@ -1,5 +1,5 @@
 defmodule GamePlatform.PubSubMessageTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias GamePlatform.PubSubMessage
 
@@ -32,6 +32,18 @@ defmodule GamePlatform.PubSubMessageTest do
     assert PubSubMessage.combine_msgs(msgs) === [
       PubSubMessage.build(:all, ["Message 1", "Message 2", "Message 3"]),
       PubSubMessage.build({:player, "id1"}, "Message 4"),
+    ]
+  end
+
+  test "combine_msgs appends messages that are lists" do
+    msgs = [
+      PubSubMessage.build(:all, ["Message 1", "Message 2"]),
+      PubSubMessage.build(:all, "Message 3"),
+      PubSubMessage.build(:all, ["Message 4"]),
+    ]
+
+    assert PubSubMessage.combine_msgs(msgs) === [
+      PubSubMessage.build(:all, ["Message 1", "Message 2", "Message 3", "Message 4"]),
     ]
   end
 
