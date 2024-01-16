@@ -1,4 +1,10 @@
 defmodule WebGames.Minesweeper.Display do
+  @moduledoc """
+  Module for writing grid status to stdout.
+
+  Should be primarily used in Dev for testing. This mostly exists because
+  I wanted to test the game state before the UI was created.
+  """
   def display_grid(game, cheat? \\ false) do
     num_width_digits = num_digits(game.w)
     display_rows = Map.keys(game.grid)

@@ -1,4 +1,18 @@
 defmodule WebGames.Minesweeper.GameState do
+  @moduledoc """
+  Game implementation module for Minesweeper.
+  """
+
+  use GamePlatform.GameState,
+    view_module: WebGamesWeb.Minesweeper.PlayerComponent,
+    display_name: "Minesweeper"
+
+  alias GamePlatform.PubSubMessage
+  alias GamePlatform.GameServer.InternalComms
+  alias WebGames.Minesweeper.Config
+  alias WebGames.Minesweeper.Display
+  alias WebGames.Minesweeper.Cell
+
   defstruct [
     w: 0,
     h: 0,
@@ -12,18 +26,6 @@ defmodule WebGames.Minesweeper.GameState do
     game_type: nil,
     end_game_ref: nil,
   ]
-
-  @post_game_timeout :timer.minutes(2)
-
-  use GamePlatform.GameState,
-    view_module: WebGamesWeb.Minesweeper.PlayerComponent,
-    display_name: "Minesweeper"
-
-  alias GamePlatform.PubSubMessage
-  alias GamePlatform.GameServer.InternalComms
-  alias WebGames.Minesweeper.Config
-  alias WebGames.Minesweeper.Display
-  alias WebGames.Minesweeper.Cell
 
   @type notification_t :: {String.t() | atom(), any()}
   @type coord_t :: {integer(), integer()}
@@ -39,6 +41,8 @@ defmodule WebGames.Minesweeper.GameState do
     end_time: DateTime.t(),
     game_type: String.t(),
   }
+
+  @post_game_timeout :timer.minutes(2)
 
   @impl true
   def init(config) do
@@ -57,8 +61,7 @@ defmodule WebGames.Minesweeper.GameState do
     end
   end
 
-  @spec all_coords(integer(), integer()) :: list(coord_t())
-  def all_coords(width, height) do
+  defp all_coords(width, height) do
     for x <- 1..width, y <- 1..height, do: {x, y}
   end
 
@@ -124,22 +127,12 @@ defmodule WebGames.Minesweeper.GameState do
     |> add_notification(:all, {:added, player_id})
     |> take_notifications()
 
-    topic_refs = [
-      :all,
-      {:player, player_id}
-    ]
-
-    {:ok, topic_refs, n, g}
+    {:ok, [], n, g}
   end
 
   @impl true
   def join_game(%__MODULE__{player: existing_player_id} = game, player_id) when player_id == existing_player_id do
-    topic_refs = [
-      :all,
-      {:player, player_id}
-    ]
-
-    {:ok, topic_refs, [], game}
+    {:ok, [], [], game}
   end
 
   @impl true
@@ -158,6 +151,12 @@ defmodule WebGames.Minesweeper.GameState do
     else
       {:error, :unknown_player}
     end
+  end
+
+  @impl true
+  def handle_game_shutdown(game) do
+    # Send a shutdown message to everyone still connected.
+    {:ok, [PubSubMessage.build(:all, {:shutdown, :normal}, :shutdown)], game}
   end
 
   @impl true
@@ -192,7 +191,7 @@ defmodule WebGames.Minesweeper.GameState do
     {n, g} = begin_game(game, space)
     |> then(&(click_cell(space, &1)))
     |> then(&(try_open(space, &1)))
-    |> update_status()
+    |> set_status_win_or_play()
     |> take_notifications()
 
     if Mix.env() === :dev do
@@ -206,7 +205,7 @@ defmodule WebGames.Minesweeper.GameState do
   def handle_event(%__MODULE__{status: :play} = game, _, {:open, space}) do
     {n, g} = click_cell(space, game)
     |> then(&(try_open(space, &1)))
-    |> update_status()
+    |> set_status_win_or_play()
     |> take_notifications()
 
     {:ok, n, g}
@@ -288,6 +287,7 @@ defmodule WebGames.Minesweeper.GameState do
   defp toggle_flag(coord, game) do
     case Cell.toggle_flag(game.grid[coord]) do
       {:error, _} -> game
+      {:noop, _} -> game
       {:ok, cell} ->
         %__MODULE__{game | grid: Map.replace(game.grid, coord, cell)}
         |> add_notification(:all, {:flag, %{coord => cell.flagged?}})
@@ -300,9 +300,9 @@ defmodule WebGames.Minesweeper.GameState do
     |> Enum.map(fn {coord, _} -> coord end)
   end
 
-  defp update_status(%__MODULE__{status: :lose} = game), do: game
-  defp update_status(%__MODULE__{status: :win} = game), do: game
-  defp update_status(%__MODULE__{status: _status} = game) do
+  defp set_status_win_or_play(%__MODULE__{status: :lose} = game), do: game
+  defp set_status_win_or_play(%__MODULE__{status: :win} = game), do: game
+  defp set_status_win_or_play(%__MODULE__{status: _status} = game) do
     if has_won?(game) do
       end_game(game, :win)
     else
@@ -348,10 +348,5 @@ defmodule WebGames.Minesweeper.GameState do
       {_, %{flagged?: true}}, acc -> acc + 1
       {_, %{flagged?: false}}, acc -> acc
     end)
-  end
-
-  @impl true
-  def handle_game_shutdown(game) do
-    {:ok, [PubSubMessage.build(:all, {:shutdown, :normal}, :shutdown)], game}
   end
 end
