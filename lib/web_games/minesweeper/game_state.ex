@@ -161,7 +161,9 @@ defmodule WebGames.Minesweeper.GameState do
 
   @impl true
   def handle_event(%__MODULE__{} = game, _, :restart) do
-    InternalComms.cancel_scheduled_message(game.end_game_ref)
+    unless game.end_game_ref |> is_nil() do
+      InternalComms.cancel_scheduled_message(game.end_game_ref)
+    end
 
     game = %__MODULE__{game |
       grid: create_blank_grid(game.w, game.h),
@@ -311,7 +313,7 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   defp end_game(game, status) do
-    end_game_ref = GamePlatform.GameServer.InternalComms.schedule_end_game(@post_game_timeout)
+    end_game_ref = InternalComms.schedule_end_game(@post_game_timeout)
 
     end_time = DateTime.utc_now()
 
