@@ -110,56 +110,56 @@ jobs:
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
 
-  # deploy-service:
-  #   if: github.event_name != 'pull_request'
-  #   name: Deploy service
-  #   runs-on: ubuntu-22.04
-  #   needs: [docker]
-  #   permissions:
-  #     contents: 'read'
-  #     id-token: 'write'
+  deploy-service:
+    if: github.event_name != 'pull_request'
+    name: Deploy service
+    runs-on: ubuntu-22.04
+    needs: [docker]
+    permissions:
+      contents: 'read'
+      id-token: 'write'
 
-  #   steps:
-  #   - id: auth
-  #     name: Authenticate with Google Cloud
-  #     uses: google-github-actions/auth@v1
-  #     with:
-  #       token_format: access_token
-  #       workload_identity_provider: '${{ secrets.WIF_PROVIDER }}'
-  #       service_account: '${{ secrets.WIF_DEPLOYER_SERVICE_ACCOUNT }}'
-  #       access_token_lifetime: 300s
-  #   - name: Set up gcloud
-  #     uses: google-github-actions/setup-gcloud@v1
-  #     with:
-  #       project_id: ${{ secrets.GCP_PROJECT_NAME }}
-  #   - name: Get short-sha
-  #     id: sha
-  #     run: echo "short_sha=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_OUTPUT
+    steps:
+    - id: auth
+      name: Authenticate with Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        token_format: access_token
+        workload_identity_provider: '${{ secrets.WIF_PROVIDER }}'
+        service_account: '${{ secrets.WIF_DEPLOYER_SERVICE_ACCOUNT }}'
+        access_token_lifetime: 300s
+    - name: Set up gcloud
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_NAME }}
+    - name: Get short-sha
+      id: sha
+      run: echo "short_sha=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_OUTPUT
 
-  #   # TODO: Should this section be its own stage? If so, if it doesn't fire,
-  #   # can it still be required by the next stage?
-  #   - name: Checkout code
-  #     uses: actions/checkout@v3
-  #   - uses: dorny/paths-filter@v2
-  #     id: changes
-  #     with:
-  #       filters: |
-  #         otelconf:
-  #           - 'otelconf/prod/**'
-  #   - name: Update OTEL Config
-  #     if: steps.changes.outputs.otelconf == 'true'
-  #     run: |-
-  #       gcloud secrets versions add ${{ secrets.OTEL_SECRET_NAME }} --data-file=./otelconf/prod/otel-collector-config.yaml
+    # TODO: Should this section be its own stage? If so, if it doesn't fire,
+    # can it still be required by the next stage?
+    # - name: Checkout code
+    #   uses: actions/checkout@v3
+    # - uses: dorny/paths-filter@v2
+    #   id: changes
+    #   with:
+    #     filters: |
+    #       otelconf:
+    #         - 'otelconf/prod/**'
+    # - name: Update OTEL Config
+    #   if: steps.changes.outputs.otelconf == 'true'
+    #   run: |-
+    #     gcloud secrets versions add ${{ secrets.OTEL_SECRET_NAME }} --data-file=./otelconf/prod/otel-collector-config.yaml
 
-  #   - name: Download service YAML
-  #     run: |-
-  #       gcloud run services describe web-games --format export > service.yaml
-  #   - name: Update the server image
-  #     uses: mikefarah/yq@master
-  #     with:
-  #       cmd: yq -i '(.spec.template.spec.containers[] | select(.name == "server")).image = "${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:sha-${{ steps.sha.outputs.short_sha }}"' service.yaml
-  #   - name: Update service
-  #     uses: google-github-actions/deploy-cloudrun@v1
-  #     with:
-  #       service: web-games
-  #       metadata: service.yaml
+    - name: Download service YAML
+      run: |-
+        gcloud run services describe web-games --format export > service.yaml
+    - name: Update the server image
+      uses: mikefarah/yq@master
+      with:
+        cmd: yq -i '(.spec.template.spec.containers[] | select(.name == "server")).image = "${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:sha-${{ steps.sha.outputs.short_sha }}"' service.yaml
+    - name: Update service
+      uses: google-github-actions/deploy-cloudrun@v1
+      with:
+        service: web-games
+        metadata: service.yaml
