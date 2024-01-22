@@ -151,15 +151,16 @@ jobs:
     #   run: |-
     #     gcloud secrets versions add ${{ secrets.OTEL_SECRET_NAME }} --data-file=./otelconf/prod/otel-collector-config.yaml
 
-    - name: Download service YAML
-      run: |-
-        gcloud run services describe web-games --region ${{ secrets.GCP_REGION }} --format export > service.yaml
-    - name: Update the server image
-      uses: mikefarah/yq@master
-      with:
-        cmd: yq -i '(.spec.template.spec.containers[] | select(.name == "server")).image = "${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:sha-${{ steps.sha.outputs.short_sha }}"' service.yaml
+    # - name: Download service YAML
+    #   run: |-
+    #     gcloud run services describe web-games --region ${{ secrets.GCP_REGION }} --format export > service.yaml
+    # - name: Update the server image
+    #   uses: mikefarah/yq@master
+    #   with:
+    #     cmd: yq -i '(.spec.template.spec.containers[] | select(.name == "server")).image = "${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:sha-${{ steps.sha.outputs.short_sha }}"' service.yaml
     - name: Update service
       uses: google-github-actions/deploy-cloudrun@v1
       with:
         service: web-games
-        metadata: service.yaml
+        image: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:sha-${{ steps.sha.outputs.short_sha }}
+        # metadata: service.yaml
