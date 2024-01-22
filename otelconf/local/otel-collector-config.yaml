@@ -8,18 +8,6 @@ receivers:
       http:
         endpoint: "0.0.0.0:4318"
 
-  # prometheus:
-  #   config:
-  #     scrape_configs:
-  #     - job_name: 'otelcol'
-  #       scrape_interval: 10s
-  #       static_configs:
-  #       - targets: ['0.0.0.0:8888']
-  #       metric_relabel_configs:
-  #         - source_labels: [ __name__ ]
-  #           regex: '.*grpc_io.*'
-  #           action: drop
-
 exporters:
   otlp/jaeger:
     endpoint: jaeger:4317
@@ -43,4 +31,4 @@ service:
     traces:
       receivers: [otlp]
       processors: []
-      exporters: [debug, otlp/jaeger]
+      exporters: [otlp/jaeger]

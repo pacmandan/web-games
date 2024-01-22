@@ -10,10 +10,8 @@ services:
     environment:
       - MIX_BUILD_PATH=/volumes/_build/dev
       - MIX_DEPS_PATH=/volumes/deps
-      - METRICS_TYPE=statsd
       - METRICS_STATSD_HOST=otel
       - METRICS_STATSD_PORT=8127
-      - TRACES_EXPORTER=otlp
       - TRACES_OTLP_ENDPOINT=http://otel:4318
     volumes:
       - type: volume
@@ -34,9 +32,9 @@ services:
       - 16686:16686 # server frontend
 
   otel:
-    image: otel/opentelemetry-collector-contrib:0.88.0
+    image: otel/opentelemetry-collector-contrib:0.92.0
     volumes:
-      - ./local_dev/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./otelconf/local/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
     ports:
       - 1888:1888 # pprof extension
       - 8888:8888 # Prometheus metrics exposed by the collector

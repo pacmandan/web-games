@@ -1,0 +1,37 @@
+receivers:
+  statsd:
+    endpoint: "0.0.0.0:8127"
+    aggregation_interval: 5s
+
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  batch:
+    timeout: 10s
+
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 65
+    spike_limit_percentage: 20
+
+  resourcedetection:
+    detectors: [gcp, docker]
+    timeout: 10s
+    override: false
+
+exporters:
+  googlecloud:
+
+service:
+  pipelines:
+    metrics:
+      receivers: [statsd]
+      processors: [memory_limiter, batch]
+      exporters: [googlecloud]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [googlecloud]
