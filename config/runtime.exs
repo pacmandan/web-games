@@ -20,26 +20,20 @@ if System.get_env("PHX_SERVER") do
   config :web_games, WebGamesWeb.Endpoint, server: true
 end
 
-config :web_games, :telemetry,
-  reporter_type: (case System.get_env("METRICS_TYPE") do
-    "statsd" -> :statsd
-    "console" -> :console
-    _ -> :none
-  end)
+if System.get_env("METRICS_DISABLE") do
+  config :web_games, :telemetry,
+    reporter_type: :none
+end
+
+if System.get_env("TRACES_DISABLE") do
+  config :opentelemetry,
+    traces_exporter: :none
+end
 
 config :web_games, :telemetry_statsd,
   host: System.get_env("METRICS_STATSD_HOST", "localhost"),
-  port: System.get_env("METRICS_STATSD_PORT", "8125") |> String.to_integer(),
+  port: System.get_env("METRICS_STATSD_PORT", "8127") |> String.to_integer(),
   socket: System.get_env("METRICS_STATSD_SOCKET")
-
-traces_exporter = case System.get_env("TRACES_EXPORTER", "none") |> String.downcase() do
-  "none" -> :none
-  "otlp" -> :otlp
-  _ -> :none
-end
-
-config :opentelemetry,
-  traces_exporter: traces_exporter
 
 config :opentelemetry_exporter,
   otlp_protocol: :http_protobuf,
@@ -59,7 +53,7 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  host = System.get_env("PHX_HOST") || "web-games.dangreen.dev"
   port = String.to_integer(System.get_env("PORT") || "4000")
 
   config :web_games, WebGamesWeb.Endpoint,

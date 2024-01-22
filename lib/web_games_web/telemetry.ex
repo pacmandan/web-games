@@ -16,12 +16,12 @@ defmodule WebGamesWeb.Telemetry do
     ]
 
     # Eventually add the rest
-    metrics = GamePlatform.Telemetry.metrics()
+    reported_metrics = GamePlatform.Telemetry.metrics() ++ metrics()
 
     reporter = case Application.get_env(:web_games, :telemetry)[:reporter_type] do
       :none -> []
-      :console -> [{Telemetry.Metrics.ConsoleReporter, metrics: metrics}]
-      :statsd -> configure_statsd_reporter(metrics)
+      :console -> [{Telemetry.Metrics.ConsoleReporter, metrics: reported_metrics}]
+      :statsd -> configure_statsd_reporter(reported_metrics)
       _ -> []
     end
 
@@ -82,7 +82,7 @@ defmodule WebGamesWeb.Telemetry do
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
       # {WebGamesWeb, :count_users, []}
-      # {GamePlatform.Telemetry, :count_active_games, []}
+      {GamePlatform.Telemetry, :count_active_games, []}
     ]
   end
 end
