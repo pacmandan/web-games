@@ -23,8 +23,8 @@ jobs:
 
     strategy:
       matrix:
-        otp: ['25.3.2.2']
-        elixir: ['1.15.0']
+        otp: ['26.2.1']
+        elixir: ['1.16.0']
 
     steps:
     - name: Setup Elixir
