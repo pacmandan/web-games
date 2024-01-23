@@ -82,7 +82,7 @@ defmodule WebGamesWeb.Telemetry do
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
       # {WebGamesWeb, :count_users, []}
-      {GamePlatform.Telemetry, :count_active_games, []}
+      # {GamePlatform.Telemetry, :count_active_games, []}
     ]
   end
 end
