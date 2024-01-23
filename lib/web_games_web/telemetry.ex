@@ -16,7 +16,7 @@ defmodule WebGamesWeb.Telemetry do
     ]
 
     # Eventually add the rest
-    reported_metrics = GamePlatform.Telemetry.metrics() ++ metrics()
+    reported_metrics = GamePlatform.Telemetry.metrics() # ++ metrics()
 
     reporter = case Application.get_env(:web_games, :telemetry)[:reporter_type] do
       :none -> []
