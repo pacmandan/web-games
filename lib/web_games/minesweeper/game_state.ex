@@ -10,7 +10,7 @@ defmodule WebGames.Minesweeper.GameState do
   alias GamePlatform.PubSubMessage
   alias GamePlatform.GameServer.InternalComms
   alias WebGames.Minesweeper.Config
-  alias WebGames.Minesweeper.Display
+  # alias WebGames.Minesweeper.Display
   alias WebGames.Minesweeper.Cell
 
   defstruct [
@@ -196,9 +196,9 @@ defmodule WebGames.Minesweeper.GameState do
     |> set_status_win_or_play()
     |> take_notifications()
 
-    if Mix.env() === :dev do
-      Display.display_grid(g, true)
-    end
+    # if Mix.env() === :dev do
+    #   Display.display_grid(g, true)
+    # end
 
     {:ok, n, g}
   end
