@@ -226,40 +226,34 @@ defmodule GamePlatform.GameServer do
 
   @impl true
   def handle_cast(%GameMessage{action: :player_connected} = msg, state) do
-    # Limit the number of connected players to 100.
-    # TODO: Code is indented too far, break this up somehow.
-    if MapSet.size(state.connected_player_ids) >= 100 do
-      {:noreply, state}
-    else
-      Logger.info("Game #{state.game_id} player #{msg.from} attempting to connect...", state_metadata(state, player_id: msg.from, msg: msg))
-      Tracer.with_span :gs_player_connected, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
-        # Just in case this is a previously disconnected player,
-        # cancel their timeout.
-        state = state |> cancel_player_timeout(msg.from)
+    Logger.info("Game #{state.game_id} player #{msg.from} attempting to connect...", state_metadata(state, player_id: msg.from, msg: msg))
+    Tracer.with_span :gs_player_connected, span_opts(state, [{:player_id, msg.from}], msg.ctx) do
+      # Just in case this is a previously disconnected player,
+      # cancel their timeout.
+      state = state |> cancel_player_timeout(msg.from)
 
-        case state.game_module.player_connected(state.game_state, msg.from) do
-          {:ok, msgs, new_game_state} ->
-            # Monitor connected player to see if/when they disconnect
+      case state.game_module.player_connected(state.game_state, msg.from) do
+        {:ok, msgs, new_game_state} ->
+          # Monitor connected player to see if/when they disconnect
 
-            new_state = if MapSet.member?(state.connected_player_ids, msg.from) do
-              # This player is already connected - don't monitor them twice.
-              state
-            else
-              state
-              |> Map.replace(:connected_player_monitors, Map.put(state.connected_player_monitors, Process.monitor(msg.payload[:pid]), msg.from))
-              |> Map.replace(:connected_player_ids, MapSet.put(state.connected_player_ids, msg.from))
-            end
-            |> Map.replace(:game_state, new_game_state)
+          new_state = if MapSet.member?(state.connected_player_ids, msg.from) do
+            # This player is already connected - don't monitor them twice.
+            state
+          else
+            state
+            |> Map.replace(:connected_player_monitors, Map.put(state.connected_player_monitors, Process.monitor(msg.payload[:pid]), msg.from))
+            |> Map.replace(:connected_player_ids, MapSet.put(state.connected_player_ids, msg.from))
+          end
+          |> Map.replace(:game_state, new_game_state)
 
-            broadcast_pubsub(msgs, new_state)
+          broadcast_pubsub(msgs, new_state)
 
-            Logger.info("Game #{new_state.game_id} player #{msg.from} connected successfully!", state_metadata(new_state, player_id: msg.from, msg: msg))
-            {:noreply, new_state}
+          Logger.info("Game #{new_state.game_id} player #{msg.from} connected successfully!", state_metadata(new_state, player_id: msg.from, msg: msg))
+          {:noreply, new_state}
 
-          {:error, reason} ->
-            Logger.error("Game #{state.game_id} failed to connect player #{msg.from} for reason: #{inspect(reason)}.", state_metadata(state, player_id: msg.from, msg: msg, err: reason))
-            {:noreply, state}
-        end
+        {:error, reason} ->
+          Logger.error("Game #{state.game_id} failed to connect player #{msg.from} for reason: #{inspect(reason)}.", state_metadata(state, player_id: msg.from, msg: msg, err: reason))
+          {:noreply, state}
       end
     end
   end

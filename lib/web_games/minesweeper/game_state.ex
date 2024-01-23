@@ -121,7 +121,6 @@ defmodule WebGames.Minesweeper.GameState do
     end
   end
 
-  # First player to join is the active player
   @impl true
   def join_game(%__MODULE__{player: nil} = game, player_id) do
     {n, g} = %__MODULE__{game | player: player_id}
@@ -131,46 +130,33 @@ defmodule WebGames.Minesweeper.GameState do
     {:ok, [], n, g}
   end
 
-  # Anyone else can join, but won't be set as the "active" player.
   @impl true
-  def join_game(%__MODULE__{player: _player_id} = game, player_id) do # when player_id == existing_player_id do
-    {n, g} = game
-    |> add_notification(:all, {:added, player_id})
-    |> take_notifications()
-
-    {:ok, [], n, g}
+  def join_game(%__MODULE__{player: existing_player_id} = game, player_id) when player_id == existing_player_id do
+    {:ok, [], [], game}
   end
 
-  # @impl true
-  # def join_game(_, _), do: {:error, :game_full}
+  @impl true
+  def join_game(_, _), do: {:error, :game_full}
 
   @impl true
   def player_connected(game, player_id) do
-    # if player_id == game.player do
+    if player_id == game.player do
+      sync_data = build_sync_data(game)
 
-    sync_data = build_sync_data(game)
+      {n, g} = game
+      |> add_sync_notification({:player, player_id}, {:sync, sync_data})
+      |> take_notifications()
 
-    {n, g} = game
-    |> add_sync_notification({:player, player_id}, {:sync, sync_data})
-    |> take_notifications()
-
-    {:ok, n, g}
-
-    # else
-    #   {:error, :unknown_player}
-    # end
+      {:ok, n, g}
+    else
+      {:error, :unknown_player}
+    end
   end
 
   @impl true
   def handle_game_shutdown(game) do
     # Send a shutdown message to everyone still connected.
     {:ok, [PubSubMessage.build(:all, {:shutdown, :normal}, :shutdown)], game}
-  end
-
-  @impl true
-  def handle_event(%__MODULE__{} = game, player_id, _) when player_id != game.player do
-    # Ignore game events coming from non-active players.
-    {:ok, [], game}
   end
 
   @impl true
