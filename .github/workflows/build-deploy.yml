@@ -128,39 +128,11 @@ jobs:
         workload_identity_provider: '${{ secrets.WIF_PROVIDER }}'
         service_account: '${{ secrets.WIF_DEPLOYER_SERVICE_ACCOUNT }}'
         access_token_lifetime: 300s
-    - name: Set up gcloud
-      uses: google-github-actions/setup-gcloud@v1
-      with:
-        project_id: ${{ secrets.GCP_PROJECT_NAME }}
     - name: Get short-sha
       id: sha
       run: echo "short_sha=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_OUTPUT
-
-    # TODO: Should this section be its own stage? If so, if it doesn't fire,
-    # can it still be required by the next stage?
-    # - name: Checkout code
-    #   uses: actions/checkout@v3
-    # - uses: dorny/paths-filter@v2
-    #   id: changes
-    #   with:
-    #     filters: |
-    #       otelconf:
-    #         - 'otelconf/prod/**'
-    # - name: Update OTEL Config
-    #   if: steps.changes.outputs.otelconf == 'true'
-    #   run: |-
-    #     gcloud secrets versions add ${{ secrets.OTEL_SECRET_NAME }} --data-file=./otelconf/prod/otel-collector-config.yaml
-
-    # - name: Download service YAML
-    #   run: |-
-    #     gcloud run services describe web-games --region ${{ secrets.GCP_REGION }} --format export > service.yaml
-    # - name: Update the server image
-    #   uses: mikefarah/yq@master
-    #   with:
-    #     cmd: yq -i '(.spec.template.spec.containers[] | select(.name == "server")).image = "${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:sha-${{ steps.sha.outputs.short_sha }}"' service.yaml
     - name: Update service
       uses: google-github-actions/deploy-cloudrun@v1
       with:
         service: web-games
         image: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:sha-${{ steps.sha.outputs.short_sha }}
-        # metadata: service.yaml
