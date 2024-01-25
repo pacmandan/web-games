@@ -270,7 +270,7 @@ defmodule WebGames.Minesweeper.GameStateTest do
     ]
   end
 
-  test "restart event resets game state, sends sync notification", %{state: state} do
+  test "restart event resets game state, sends sync notifications", %{state: state} do
     state = state
     |> Map.put(:player, "playerid_1")
 
@@ -351,6 +351,14 @@ defmodule WebGames.Minesweeper.GameStateTest do
         audience_size: 0,
       }}}
     ]
+  end
+
+  test "game events are blocked for non-active players", %{state: state} do
+    state = state
+    |> Map.put(:player, "playerid_1")
+
+    {:ok, [], new_state} = GameState.handle_event(state, "playerid_2", {:open, {1,1}})
+    assert new_state === state
   end
 
   test "restart event resets game shutdown timer if it exists", %{state: state} do
