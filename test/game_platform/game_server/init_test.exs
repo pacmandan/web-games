@@ -1,10 +1,12 @@
 defmodule GamePlatform.GameServer.InitTest do
   use GamePlatform.GameServerCase
 
+  alias GamePlatform.GameServer.GameSpec
+
   test "start_link fails if :pubsub is not set" do
     init_args = {
       "ABCD",
-      {MockGameState, %{conf: :success}},
+      GameSpec.make(MockGameState, "playerid_1", %{conf: :success}),
       %{},
     }
     assert {:error, :invalid_config} === GameServer.start_link(init_args)
@@ -13,7 +15,7 @@ defmodule GamePlatform.GameServer.InitTest do
   test "start_link fails if :game_timeout_length is negative" do
     init_args = {
       "ABCD",
-      {MockGameState, %{conf: :success}},
+      GameSpec.make(MockGameState, "playerid_1", %{conf: :success}),
       %{
         pubsub: WebGames.PubSub,
         game_timeout_length: -50,
@@ -25,7 +27,7 @@ defmodule GamePlatform.GameServer.InitTest do
   test "start_link fails if :player_disconnect_timeout_length is negative" do
     init_args = {
       "ABCD",
-      {MockGameState, %{conf: :success}},
+      GameSpec.make(MockGameState, "playerid_1", %{conf: :success}),
       %{
         pubsub: WebGames.PubSub,
         player_disconnect_timeout_length: -50,
@@ -37,7 +39,7 @@ defmodule GamePlatform.GameServer.InitTest do
   test "init initializes server state, then continues to game state" do
     init_args = {
       "ABCD",
-      {MockGameState, %{conf: :success}},
+      GameSpec.make(MockGameState, "playerid_1", %{conf: :success}),
       %{},
     }
 
@@ -65,7 +67,7 @@ defmodule GamePlatform.GameServer.InitTest do
     {:noreply, new_state} = GameServer.handle_continue(:init_game, state)
 
     # State module is called
-    assert_called MockGameState.init(%{conf: :success})
+    assert_called MockGameState.init(%{conf: :success}, "playerid_1")
     # Game state is initialized
     assert new_state.game_state === %{state: :initialized}
     # Game timeout is scheduled
@@ -81,6 +83,6 @@ defmodule GamePlatform.GameServer.InitTest do
     # Need to figure out a better way to handle this in the future maybe.
     # If for no better reason than for communication to the frontend.
     assert_raise MatchError, fn -> GameServer.handle_continue(:init_game, state) end
-    assert_called MockGameState.init(%{conf: :failed})
+    assert_called MockGameState.init(%{conf: :failed}, "playerid_1")
   end
 end

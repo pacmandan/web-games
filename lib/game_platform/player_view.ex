@@ -121,7 +121,7 @@ defmodule GamePlatform.PlayerView do
   def handle_info(%PubSubMessage{type: :shutdown, payload: _payload, ctx: ctx}, socket) do
     Tracer.with_span ctx, :pv_handle_shutdown, span_opts(socket, ctx) do
       socket = socket
-      |> put_flash(:info, "Server has shut down")
+      |> put_flash(:info, "Game server has shut down")
       |> redirect(to: "/")
 
       {:noreply, socket}
@@ -131,6 +131,13 @@ defmodule GamePlatform.PlayerView do
   def handle_info({:display_event, payload}, socket) do
     %{game_info: %{view_module: view_module}, game_id: game_id} = socket.assigns
     send_update(view_module, id: game_id, type: :display, payload: payload)
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:put_flash, type, payload}, socket) do
+    socket = socket
+    |> put_flash(type, payload)
 
     {:noreply, socket}
   end
@@ -203,6 +210,10 @@ defmodule GamePlatform.PlayerView do
 
   def send_self_event_after(payload, millis \\ 0) do
     Process.send_after(self(), {:display_event, payload}, millis)
+  end
+
+  def put_flash(type, payload) do
+    Process.send(self(), {:put_flash, type, payload}, [])
   end
 
   defp span_opts(%Phoenix.LiveView.Socket{} = socket, ctx) do

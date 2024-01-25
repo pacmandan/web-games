@@ -1,8 +1,10 @@
 defmodule WebGamesWeb.Minesweeper.PlayerComponent do
   use GamePlatform.PlayerComponent
 
+  require Logger
   require OpenTelemetry.Tracer
   alias GamePlatform.Game
+  alias GamePlatform.PlayerView
 
   @impl true
   def mount(socket) do
@@ -22,6 +24,8 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
       num_flags: 0,
       num_mines: 0,
       game_type: nil,
+      player_type: nil,
+      audience_size: 0,
     }
   end
 
@@ -114,6 +118,32 @@ defmodule WebGamesWeb.Minesweeper.PlayerComponent do
     socket
     |> assign(:grid, new_grid)
     |> render_cells(coord_list)
+  end
+
+  defp process_msg({:new_active_player, _id}, socket) do
+    socket
+  end
+
+  defp process_msg({:active_player_leave, _id}, socket) do
+    PlayerView.put_flash(:info, "Player has left, game will shut down")
+
+    socket
+  end
+
+  defp process_msg({:audience_join, _id}, %{assigns: %{audience_size: audience_size}} = socket) do
+    socket
+    |> assign(:audience_size, audience_size + 1)
+  end
+
+  defp process_msg({:audience_leave, _id}, %{assigns: %{audience_size: audience_size}} = socket) do
+    socket
+    |> assign(:audience_size, audience_size - 1)
+  end
+
+  defp process_msg(unknown_msg, socket) do
+    Logger.error("Unhandled message from server: #{inspect(unknown_msg)}")
+
+    socket
   end
 
   defp update_timer(%{assigns: %{end_time: nil}} = socket) do

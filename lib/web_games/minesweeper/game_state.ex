@@ -21,6 +21,7 @@ defmodule WebGames.Minesweeper.GameState do
     status: :init,
     notifications: [],
     player: nil,
+    audience: MapSet.new(),
     start_time: nil,
     end_time: nil,
     game_type: nil,
@@ -37,15 +38,19 @@ defmodule WebGames.Minesweeper.GameState do
     num_mines: integer(),
     grid: grid_t(),
     status: :init | :play | :win | :lose,
+    notifications: list(PubSubMessage.t()),
+    player: String.t(),
+    audience: MapSet.t(String.t()),
     start_time: DateTime.t(),
     end_time: DateTime.t(),
     game_type: String.t(),
+    end_game_ref: reference(),
   }
 
   @post_game_timeout :timer.minutes(2)
 
   @impl true
-  def init(config) do
+  def init(config, init_player) do
     if Config.valid?(config) do
       game = %__MODULE__{
         w: config.width,
@@ -53,6 +58,7 @@ defmodule WebGames.Minesweeper.GameState do
         num_mines: config.num_mines,
         game_type: config.type,
         grid: create_blank_grid(config.width, config.height),
+        player: init_player,
       }
 
       {:ok, game}
@@ -122,35 +128,93 @@ defmodule WebGames.Minesweeper.GameState do
   end
 
   @impl true
+  # Player is set during init now, so this is unlikely to happen now.
   def join_game(%__MODULE__{player: nil} = game, player_id) do
     {n, g} = %__MODULE__{game | player: player_id}
-    |> add_notification(:all, {:added, player_id})
+    |> add_notification(:all, {:new_active_player, player_id})
     |> take_notifications()
 
-    {:ok, [], n, g}
+    {:ok, [:players], n, g}
   end
 
   @impl true
-  def join_game(%__MODULE__{player: existing_player_id} = game, player_id) when player_id == existing_player_id do
-    {:ok, [], [], game}
+  def join_game(%__MODULE__{player: active_player_id} = game, player_id) when player_id == active_player_id do
+    {:ok, [:players], [], game}
   end
 
   @impl true
-  def join_game(_, _), do: {:error, :game_full}
+  def join_game(%__MODULE__{audience: audience} = game, audience_member_id) do
+    if MapSet.size(audience) >= 100 do
+      {:error, :game_full}
+    else
+      {n, g} = add_audience_member(game, audience_member_id)
+      |> take_notifications()
+
+      {:ok, [:audience], n, g}
+    end
+  end
+
+  defp add_audience_member(game, audience_member_id) do
+    # Need to check this so we can also add a notification if it's a new audience member.
+    unless MapSet.member?(game.audience, audience_member_id) do
+      game
+      |> Map.put(:audience, MapSet.put(game.audience, audience_member_id))
+      |> add_notification(:all, {:audience_join, audience_member_id})
+    else
+      game
+    end
+  end
+
+  @impl true
+  def leave_game(%__MODULE__{} = game, player_id, _reason) do
+    cond do
+      player_id == game.player ->
+        # If this is the active player, end the game immediately
+        InternalComms.schedule_end_game(5000)
+
+        {n, g} = game
+        |> add_notification(:all, {:active_player_leave, player_id})
+        |> take_notifications()
+
+        {:ok, n, g}
+      MapSet.member?(game.audience, player_id) ->
+        # If this is an audience member, remove them and send the audience_leave notification
+        {n, g} = %__MODULE__{game | audience: MapSet.delete(game.audience, player_id)}
+        |> add_notification(:all, {:audience_leave, player_id})
+        |> take_notifications()
+
+        {:ok, n, g}
+      true ->
+        # Otherwise do nothing
+        {:ok, [], game}
+    end
+  end
 
   @impl true
   def player_connected(game, player_id) do
-    if player_id == game.player do
-      sync_data = build_sync_data(game)
+    cond do
+      player_id == game.player ->
+        {n, g} = sync_connected_player(game, player_id, :player)
+        |> take_notifications()
 
-      {n, g} = game
-      |> add_sync_notification({:player, player_id}, {:sync, sync_data})
-      |> take_notifications()
+        {:ok, n, g}
 
-      {:ok, n, g}
-    else
-      {:error, :unknown_player}
+      MapSet.member?(game.audience, player_id) ->
+        {n, g} = sync_connected_player(game, player_id, :audience)
+        |> take_notifications()
+
+        {:ok, n, g}
+
+      true ->
+        {:error, :unknown_player}
     end
+  end
+
+  defp sync_connected_player(game, player_id, player_type) do
+    sync_data = build_sync_data(game, player_type)
+
+    game
+    |> add_sync_notification({:player, player_id}, {:sync, sync_data})
   end
 
   @impl true
@@ -173,10 +237,12 @@ defmodule WebGames.Minesweeper.GameState do
       end_game_ref: nil,
     }
 
-    sync_data = build_sync_data(game)
+    player_sync_data = build_sync_data(game, :player)
+    audience_sync_data = build_sync_data(game, :audience)
 
     {n, g} = game
-    |> add_sync_notification(:all, {:sync, sync_data})
+    |> add_sync_notification(:players, {:sync, player_sync_data})
+    |> add_sync_notification(:audience, {:sync, audience_sync_data})
     |> take_notifications()
 
     {:ok, n, g}
@@ -221,7 +287,7 @@ defmodule WebGames.Minesweeper.GameState do
     {:ok, n, g}
   end
 
-  defp build_sync_data(game) do
+  defp build_sync_data(game, player_type) when player_type in [:player, :audience] do
     # Pre-calculate this so we don't do it inside the loop a bunch of times.
     show_mines? = game.status in [:win, :lose]
 
@@ -243,6 +309,8 @@ defmodule WebGames.Minesweeper.GameState do
       start_time: game.start_time,
       end_time: game.end_time,
       game_type: game.game_type,
+      player_type: player_type,
+      audience_size: MapSet.size(game.audience),
     }
   end
 

@@ -26,6 +26,7 @@ defmodule WebGames.Minesweeper.GameStateTest do
       status: :init,
       notifications: [],
       player: nil,
+      audience: MapSet.new(),
       start_time: nil,
       end_time: nil,
       game_type: :custom,
@@ -128,7 +129,7 @@ defmodule WebGames.Minesweeper.GameStateTest do
       type: :custom,
     }
 
-    assert {:ok, %GameState{} = game_state} = GameState.init(config)
+    assert {:ok, %GameState{} = game_state} = GameState.init(config, "playerid_1")
     assert game_state.w === 5
     assert game_state.h === 6
     assert game_state.num_mines === 7
@@ -136,7 +137,8 @@ defmodule WebGames.Minesweeper.GameStateTest do
     assert game_state.start_time |> is_nil()
     assert game_state.end_time |> is_nil()
     assert game_state.end_game_ref |> is_nil()
-    assert game_state.player |> is_nil()
+    assert game_state.player === "playerid_1"
+    assert game_state.audience === MapSet.new()
     assert game_state.notifications === []
     assert game_state.status === :init
     assert game_state.grid |> is_map()
@@ -160,35 +162,50 @@ defmodule WebGames.Minesweeper.GameStateTest do
       type: :custom,
     }
 
-    assert GameState.init(config) === {:error, :invalid_config}
+    assert GameState.init(config, "playerid_1") === {:error, :invalid_config}
   end
 
-  test "join game adds player, gives no topics, and returns an :added notification", %{state: state} do
+  test "join game with no set player adds player, gives player topic, and returns an :new_active_player notification", %{state: state} do
     {:ok, topics, msgs, new_state} = GameState.join_game(state, "playerid_1")
 
-    assert topics === []
+    assert topics === [:players]
     assert msgs === [
-      %PubSubMessage{to: :all, payload: {:added, "playerid_1"}, type: :game_event}
+      %PubSubMessage{to: :all, payload: {:new_active_player, "playerid_1"}, type: :game_event}
     ]
     assert new_state.player === "playerid_1"
   end
 
-  test "join game on existing player does nothing", %{state: state} do
+  test "join game on existing player just returns relevant topics", %{state: state} do
     state = state
     |> Map.put(:player, "playerid_1")
 
     {:ok, topics, msgs, new_state} = GameState.join_game(state, "playerid_1")
 
-    assert topics === []
+    assert topics === [:players]
     assert msgs === []
     assert new_state.player === "playerid_1"
   end
 
-  test "join game returns error when a second player tries to join", %{state: state} do
+  test "join game adds audience member when a non-active player joins", %{state: state} do
     state = state
-    |> Map.put(:player, "playerid_2")
+    |> Map.put(:player, "playerid_1")
 
-    assert GameState.join_game(state, "playerid_1") === {:error, :game_full}
+    {:ok, topics, msgs, new_state} = GameState.join_game(state, "playerid_2")
+
+    assert topics === [:audience]
+    assert msgs === [
+      %PubSubMessage{to: :all, payload: {:audience_join, "playerid_2"}, type: :game_event}
+    ]
+    assert new_state.player === "playerid_1"
+    assert new_state.audience === MapSet.new(["playerid_2"])
+  end
+
+  test "join game returns error when player list is full", %{state: state} do
+    state = state
+    |> Map.put(:player, "playerid_1")
+    |> Map.put(:audience, 1..101 |> Enum.to_list |> MapSet.new())
+
+    assert GameState.join_game(state, "playerid_999") === {:error, :game_full}
   end
 
   test "player connected sends sync notification", %{state: state} do
@@ -230,7 +247,9 @@ defmodule WebGames.Minesweeper.GameStateTest do
         status: :init,
         start_time: nil,
         end_time: nil,
-        game_type: :custom
+        game_type: :custom,
+        player_type: :player,
+        audience_size: 0,
       }}}
     ]
   end
@@ -263,7 +282,7 @@ defmodule WebGames.Minesweeper.GameStateTest do
     assert Enum.count(new_state.grid, fn {_, cell} -> cell.has_mine? end) === 0
     display_cell = %{value: nil, has_mine?: nil, flagged?: false, opened?: false, clicked?: false}
     assert msgs === [
-      %PubSubMessage{to: :all, type: :sync, payload: {:sync, %{
+      %PubSubMessage{to: :audience, type: :sync, payload: {:sync, %{
         grid: %{
           {1, 1} => display_cell,
           {1, 2} => display_cell,
@@ -293,7 +312,43 @@ defmodule WebGames.Minesweeper.GameStateTest do
         status: :init,
         start_time: nil,
         end_time: nil,
-        game_type: :custom
+        game_type: :custom,
+        player_type: :audience,
+        audience_size: 0,
+      }}},
+      %PubSubMessage{to: :players, type: :sync, payload: {:sync, %{
+        grid: %{
+          {1, 1} => display_cell,
+          {1, 2} => display_cell,
+          {1, 3} => display_cell,
+          {1, 4} => display_cell,
+          {2, 1} => display_cell,
+          {2, 2} => display_cell,
+          {2, 3} => display_cell,
+          {2, 4} => display_cell,
+          {3, 1} => display_cell,
+          {3, 2} => display_cell,
+          {3, 3} => display_cell,
+          {3, 4} => display_cell,
+          {4, 1} => display_cell,
+          {4, 2} => display_cell,
+          {4, 3} => display_cell,
+          {4, 4} => display_cell,
+          {5, 1} => display_cell,
+          {5, 2} => display_cell,
+          {5, 3} => display_cell,
+          {5, 4} => display_cell
+        },
+        width: 5,
+        height: 4,
+        num_mines: 2,
+        num_flags: 0,
+        status: :init,
+        start_time: nil,
+        end_time: nil,
+        game_type: :custom,
+        player_type: :player,
+        audience_size: 0,
       }}}
     ]
   end

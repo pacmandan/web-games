@@ -38,6 +38,7 @@ defmodule GamePlatform.GameServerCase do
       game_config: %{conf: :success},
       game_state: %{game_type: :test},
       start_time: ~U[2024-01-06 23:25:38.371659Z],
+      init_player: "playerid_1",
       server_config: %{
         game_timeout_length: :timer.minutes(5),
         player_disconnect_timeout_length: :timer.minutes(2),

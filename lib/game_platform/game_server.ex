@@ -8,6 +8,7 @@ defmodule GamePlatform.GameServer do
   require Logger
   require OpenTelemetry.Tracer, as: Tracer
 
+  alias GamePlatform.GameServer.GameSpec
   alias GamePlatform.PubSubMessage
   alias GamePlatform.GameServer.InternalComms
 
@@ -16,12 +17,11 @@ defmodule GamePlatform.GameServer do
     player_disconnect_timeout_length: :timer.minutes(2),
   }
 
-  @type game_spec_t :: {module(), any()}
-
   @type state_t :: %{
     game_id: String.t(),
     game_module: module(),
     game_config: map(),
+    init_player: String.t(),
     game_state: term(),
     server_config: map(),
     timeout_ref: reference(),
@@ -64,7 +64,7 @@ defmodule GamePlatform.GameServer do
     config map to pass to that module during initialization.
   - A server config, used to configure this server.
   """
-  @spec start_link({String.t(), game_spec_t(), map()}) :: {:ok, pid()} | {:error, any()}
+  @spec start_link({String.t(), GameSpec.t(), map()}) :: {:ok, pid()} | {:error, any()}
   def start_link({game_id, _game_spec, server_config} = init_arg) do
     if valid_server_config(server_config) do
       GenServer.start_link(__MODULE__, init_arg, name: via_tuple(game_id))
@@ -90,14 +90,15 @@ defmodule GamePlatform.GameServer do
   end
 
   @impl true
-  @spec init({String.t(), game_spec_t(), map()}) :: {:ok, map(), {:continue, atom()}}
-  def init({game_id, {game_module, game_config}, server_config}) do
+  @spec init({String.t(), GameSpec.t(), map()}) :: {:ok, map(), {:continue, atom()}}
+  def init({game_id, %GameSpec{} = game_spec, server_config}) do
     server_config = Map.merge(@default_server_config, server_config)
 
     init_state = %{
       game_id: game_id,
-      game_module: game_module,
-      game_config: game_config,
+      game_module: game_spec.game_module,
+      game_config: game_spec.game_config,
+      init_player: game_spec.init_player,
       game_state: nil,
       start_time: DateTime.utc_now(),
       server_config: server_config,
@@ -122,7 +123,7 @@ defmodule GamePlatform.GameServer do
       # However, it will give a weird error in the UI and not say why a game
       # didn't start. (It'll just say "game does not exist".)
       # TODO: Do a better job of communicating startup failures in the UI.
-      {:ok, game_state} = state.game_module.init(state.game_config)
+      {:ok, game_state} = state.game_module.init(state.game_config, state.init_player)
 
       new_state = state
       |> Map.put(:game_state, game_state)
