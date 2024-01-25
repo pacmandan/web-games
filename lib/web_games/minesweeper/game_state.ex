@@ -223,6 +223,11 @@ defmodule WebGames.Minesweeper.GameState do
     {:ok, [PubSubMessage.build(:all, {:shutdown, :normal}, :shutdown)], game}
   end
 
+  def handle_event(%__MODULE__{player: active_player_id} = game, player_id, _) when player_id != active_player_id do
+    # Only accept events from the active player.
+    {:ok, [], game}
+  end
+
   @impl true
   def handle_event(%__MODULE__{} = game, _, :restart) do
     unless game.end_game_ref |> is_nil() do
