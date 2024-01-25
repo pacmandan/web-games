@@ -8,7 +8,6 @@ defmodule WebGamesWeb.NewGameController do
   def start_minesweeper(conn, %{"width" => width, "height" => height, "num_mines" => num_mines, "type" => "custom"}) do
     player_id = get_player_id(conn)
 
-    # TODO: Handle config validation
     minesweeper_config = Minesweeper.Config.custom(width, height, num_mines)
 
     if Minesweeper.Config.valid?(minesweeper_config) do

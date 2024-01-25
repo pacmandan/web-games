@@ -3,11 +3,11 @@ defmodule GamePlatform.MockGameState do
     view_module: GamePlatform.MockGameView,
     display_name: "MOCK_GAME"
 
-  def init(%{conf: :failed}) do
+  def init(%{conf: :failed}, _player_id) do
     {:error, :invalid_config}
   end
 
-  def init(_game_config) do
+  def init(_game_config, _player_id) do
     {:ok, %{state: :initialized}}
   end
 

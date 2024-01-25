@@ -67,7 +67,7 @@ defmodule WebGames.LightCycles.GameState do
   }
 
   @impl true
-  def init(config) do
+  def init(config, _init_player) do
     state = %__MODULE__{
       free_spaces: MapSet.new(generate_blank_grid(config.width, config.height)),
       height: config.height,

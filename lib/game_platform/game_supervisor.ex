@@ -5,6 +5,7 @@ defmodule GamePlatform.GameSupervisor do
 
   use DynamicSupervisor
 
+  alias GamePlatform.GameServer.GameSpec
   alias GamePlatform.GameRegistry
   alias GamePlatform.GameServer
 
@@ -15,7 +16,7 @@ defmodule GamePlatform.GameSupervisor do
   @doc """
   Start a new game server with the given specs and ID length.
   """
-  @spec start_game(GameServer.game_spec_t(), map(), integer()) ::
+  @spec start_game(GameSpec.t(), map(), integer()) ::
     {:ok, String.t(), any()}
     | {:error, :ignore | :max_children | :unknown}
   def start_game(game_spec, server_config, id_length \\ 4)

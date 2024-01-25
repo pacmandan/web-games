@@ -7,23 +7,26 @@ defmodule WebGames do
   if it comes from the database, an external API or others.
   """
 
+  alias GamePlatform.GameServer.GameSpec
   alias WebGames.Minesweeper.GameState, as: MinesweeperState
   alias WebGames.LightCycles.GameState, as: LightCyclesState
 
-  def start_minesweeper(_player_id, minesweeper_config) do
-    # TODO: Include player id in config
+  def start_minesweeper(player_id, minesweeper_config) do
     server_config = %{
       pubsub: WebGames.PubSub,
+      player_disconnect_timeout_length: :timer.seconds(15),
     }
 
-    GamePlatform.GameSupervisor.start_game({MinesweeperState, minesweeper_config}, server_config)
+    GameSpec.make(MinesweeperState, player_id, minesweeper_config)
+    |> GamePlatform.GameSupervisor.start_game(server_config)
   end
 
-  def start_lightcycles(_player_id, lightcycles_config) do
+  def start_lightcycles(player_id, lightcycles_config) do
     server_config = %{
       pubsub: WebGames.PubSub,
     }
-    GamePlatform.GameSupervisor.start_game({LightCyclesState, lightcycles_config}, server_config)
+    GameSpec.make(LightCyclesState, player_id, lightcycles_config)
+    |> GamePlatform.GameSupervisor.start_game(server_config)
   end
 
   # TODO: Wrap this in a ":dev" check

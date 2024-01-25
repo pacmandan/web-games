@@ -18,7 +18,7 @@ defmodule GamePlatform.GameState do
 
   Called by the game server during initialization. (In a :continue)
   """
-  @callback init(game_config :: term()) :: {:ok, game_state()} | {:error, term()}
+  @callback init(game_config :: term(), init_player :: player_id()) :: {:ok, game_state()} | {:error, term()}
 
   @doc """
   Tells the state that the provided player is attempting to join the game.

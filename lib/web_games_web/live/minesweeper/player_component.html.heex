@@ -1,5 +1,6 @@
 <div class="text-white">
   <div class="max-w-xl mx-auto my-3">
+    <div>Viewing: <%= @audience_size %></div>
     <div :if={!is_nil(@start_time)}><p phx-hook="MinesweeperTimer" id="timer" phx-value-start_time={@start_time} phx-update="ignore" class="font-mono text-2xl text-center">00:00</p></div>
     <div :if={is_nil(@start_time)}><p class="font-mono text-2xl text-center">00:00</p></div>
     <div class="grid grid-cols-3 h-10">
@@ -7,7 +8,9 @@
       <span class="font-bold text-center">
         <span :if={@status in [:win, :lose]}>
           <%= @display_status %>
-          <.button phx-click="restart" phx-target={@myself} class="mx-2">Play again?</.button>
+          <span :if={@player_type == :player}>
+            <.button phx-click="restart" phx-target={@myself} class="mx-2">Play again?</.button>
+          </span>
         </span>
       </span>
       <span class="text-right"><span class="font-bold">Game: </span><%= @game_type %></span>
@@ -18,9 +21,9 @@
       <%= for {{x,y}, cell} <- @display_grid do %>
         <div style={"grid-column-start:#{x};grid-row-start:#{y}"} id={"cell_box_#{x}_#{y}"}>
           <div class={"w-8 h-8 #{cell.background_color} #{cell.text_color} #{cell.border_color} border text-center"}
-            phx-click={if @clicks_enabled?, do: "click", else: nil}
+            phx-click={if @clicks_enabled? && @player_type == :player, do: "click", else: nil}
             phx-target={@myself}
-            phx-hook="MinesweeperFlag"
+            phx-hook={if @player_type == :player, do: "MinesweeperFlag", else: nil}
             phx-value-x={x}
             phx-value-y={y}
             id={"cell_click_#{x}_#{y}"}
